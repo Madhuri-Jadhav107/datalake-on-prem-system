@@ -1,0 +1,19 @@
+# Data Files
+*.csv
+*.dat
+*.parquet
+*.avro
+
+# Logs
+*.log
+spark-events/
+
+# Warehouse Data
+warehouse/
+local/
+
+# IDE/System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
