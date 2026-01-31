@@ -1,0 +1,83 @@
+{
+  "format-version" : 2,
+  "table-uuid" : "3958fbd9-8681-42d8-a934-4e217a505640",
+  "location" : "/home/iceberg/warehouse/local/db/sample_table_local",
+  "last-sequence-number" : 1,
+  "last-updated-ms" : 1769758984642,
+  "last-column-id" : 3,
+  "current-schema-id" : 0,
+  "schemas" : [ {
+    "type" : "struct",
+    "schema-id" : 0,
+    "fields" : [ {
+      "id" : 1,
+      "name" : "id",
+      "required" : false,
+      "type" : "string"
+    }, {
+      "id" : 2,
+      "name" : "name",
+      "required" : false,
+      "type" : "string"
+    }, {
+      "id" : 3,
+      "name" : "role",
+      "required" : false,
+      "type" : "string"
+    } ]
+  } ],
+  "default-spec-id" : 0,
+  "partition-specs" : [ {
+    "spec-id" : 0,
+    "fields" : [ ]
+  } ],
+  "last-partition-id" : 999,
+  "default-sort-order-id" : 0,
+  "sort-orders" : [ {
+    "order-id" : 0,
+    "fields" : [ ]
+  } ],
+  "properties" : {
+    "owner" : "root",
+    "write.parquet.compression-codec" : "zstd"
+  },
+  "current-snapshot-id" : 312121848418827438,
+  "refs" : {
+    "main" : {
+      "snapshot-id" : 312121848418827438,
+      "type" : "branch"
+    }
+  },
+  "snapshots" : [ {
+    "sequence-number" : 1,
+    "snapshot-id" : 312121848418827438,
+    "timestamp-ms" : 1769758984642,
+    "summary" : {
+      "operation" : "append",
+      "spark.app.id" : "local-1769758934376",
+      "added-data-files" : "1",
+      "added-records" : "5",
+      "added-files-size" : "1034",
+      "changed-partition-count" : "1",
+      "total-records" : "5",
+      "total-files-size" : "1034",
+      "total-data-files" : "1",
+      "total-delete-files" : "0",
+      "total-position-deletes" : "0",
+      "total-equality-deletes" : "0",
+      "engine-version" : "3.5.5",
+      "app-id" : "local-1769758934376",
+      "engine-name" : "spark",
+      "iceberg-version" : "Apache Iceberg 1.8.1 (commit 9ce0fcf0af7becf25ad9fc996c3bad2afdcfd33d)"
+    },
+    "manifest-list" : "/home/iceberg/warehouse/local/db/sample_table_local/metadata/snap-312121848418827438-1-225ad6b0-8100-46ff-855c-98e6c5c7319f.avro",
+    "schema-id" : 0
+  } ],
+  "statistics" : [ ],
+  "partition-statistics" : [ ],
+  "snapshot-log" : [ {
+    "timestamp-ms" : 1769758984642,
+    "snapshot-id" : 312121848418827438
+  } ],
+  "metadata-log" : [ ]
+}

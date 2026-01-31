@@ -1,0 +1,99 @@
+version: "3.8"
+
+x-common-config: &common-config
+  image: apache/ozone:1.4.0
+
+  env_file:
+    - docker-config
+  networks:
+    - ozone-net
+
+x-replication: &replication
+  OZONE-SITE.XML_ozone.server.default.replication: ${OZONE_REPLICATION_FACTOR:-1}
+
+services:
+
+  scm:
+    <<: *common-config
+    hostname: scm
+    command: ["ozone", "scm"]
+    environment:
+      <<: *replication
+      ENSURE_SCM_INITIALIZED: /data/metadata/scm/current/VERSION
+      OZONE-SITE.XML_hdds.scm.safemode.min.datanode: ${OZONE_SAFEMODE_MIN_DATANODES:-1}
+    ports:
+      - "9860:9860"
+      - "9876:9876"
+
+  om:
+    <<: *common-config
+    hostname: om
+    command: ["ozone", "om"]
+    environment:
+      <<: *replication
+      ENSURE_OM_INITIALIZED: /data/metadata/om/current/VERSION
+    ports:
+      - "9862:9862"
+      - "9874:9874"
+    depends_on:
+      - scm
+
+  datanode:
+    <<: *common-config
+    hostname: datanode
+    command: ["ozone", "datanode"]
+    environment:
+      <<: *replication
+    ports:
+      - "19864:19864"
+      - "9882:9882"
+    depends_on:
+      - scm
+
+  recon:
+    <<: *common-config
+    hostname: recon
+    command: ["ozone", "recon"]
+    environment:
+      <<: *replication
+    ports:
+      - "9888:9888"
+    depends_on:
+      - scm
+
+  s3g:
+    <<: *common-config
+    hostname: s3g
+    command: ["ozone", "s3g"]
+    environment:
+      <<: *replication
+    ports:
+      - "9878:9878"
+      - "19878:19878"
+    depends_on:
+      - om
+
+  spark-iceberg:
+    image: tabulario/spark-iceberg
+    hostname: spark-iceberg
+    container_name: spark-iceberg
+    depends_on:
+      - s3g
+      - scm
+      - om
+    networks:
+      - ozone-net
+    environment:
+      - SPARK_HOME=/opt/spark
+    ports:
+      - "8080:8080"
+      - "8888:8888"
+    volumes:
+      - .:/home/iceberg/local
+      - ./warehouse:/home/iceberg/warehouse
+      - ./notebooks:/home/iceberg/notebooks
+
+networks:
+  ozone-net:
+    driver: bridge
+
