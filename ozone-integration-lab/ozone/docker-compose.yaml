@@ -76,7 +76,6 @@ services:
   spark-iceberg:
     image: tabulario/spark-iceberg
     hostname: spark-iceberg
-    container_name: spark-iceberg
     depends_on:
       - s3g
       - scm
