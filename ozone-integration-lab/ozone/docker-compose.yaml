@@ -52,7 +52,7 @@ services:
     environment:
       <<: *replication
     ports:
-      - "19864:19864"
+      - "29864:19864"
       - "19882:9882"
     depends_on:
       - scm
