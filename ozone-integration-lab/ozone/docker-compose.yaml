@@ -2,17 +2,18 @@ version: "3.8"
 
 x-common-config: &common-config
   image: apache/ozone:1.4.0
-
   env_file:
     - docker-config
   networks:
     - ozone-net
 
 x-replication: &replication
-  OZONE-SITE.XML_ozone.server.default.replication: ${OZONE_REPLICATION_FACTOR:-1}
+  OZONE-SITE.XML_ozone.server.default.replication: "1"
 
 services:
-
+  # -------------------------
+  # Ozone SCM
+  # -------------------------
   scm:
     <<: *common-config
     hostname: scm
@@ -20,11 +21,14 @@ services:
     environment:
       <<: *replication
       ENSURE_SCM_INITIALIZED: /data/metadata/scm/current/VERSION
-      OZONE-SITE.XML_hdds.scm.safemode.min.datanode: ${OZONE_SAFEMODE_MIN_DATANODES:-1}
+      OZONE-SITE.XML_hdds.scm.safemode.min.datanode: "1"
     ports:
-      - "9860:9860"
-      - "9876:9876"
+      - "19860:9860"
+      - "19876:9876"
 
+  # -------------------------
+  # Ozone OM
+  # -------------------------
   om:
     <<: *common-config
     hostname: om
@@ -33,11 +37,14 @@ services:
       <<: *replication
       ENSURE_OM_INITIALIZED: /data/metadata/om/current/VERSION
     ports:
-      - "9862:9862"
-      - "9874:9874"
+      - "19862:9862"
+      - "19874:9874"
     depends_on:
       - scm
 
+  # -------------------------
+  # Ozone DataNode
+  # -------------------------
   datanode:
     <<: *common-config
     hostname: datanode
@@ -46,10 +53,13 @@ services:
       <<: *replication
     ports:
       - "19864:19864"
-      - "9882:9882"
+      - "19882:9882"
     depends_on:
       - scm
 
+  # -------------------------
+  # Ozone Recon
+  # -------------------------
   recon:
     <<: *common-config
     hostname: recon
@@ -57,10 +67,13 @@ services:
     environment:
       <<: *replication
     ports:
-      - "9888:9888"
+      - "19888:9888"
     depends_on:
       - scm
 
+  # -------------------------
+  # Ozone S3 Gateway
+  # -------------------------
   s3g:
     <<: *common-config
     hostname: s3g
@@ -68,11 +81,14 @@ services:
     environment:
       <<: *replication
     ports:
-      - "9878:9878"
-      - "19878:19878"
+      - "19878:9878"
+      - "29878:19878"
     depends_on:
       - om
 
+  # -------------------------
+  # Spark + Iceberg
+  # -------------------------
   spark-iceberg:
     image: tabulario/spark-iceberg
     hostname: spark-iceberg
@@ -83,37 +99,43 @@ services:
     networks:
       - ozone-net
     environment:
-      - SPARK_HOME=/opt/spark
+      SPARK_HOME: /opt/spark
     ports:
-      - "8080:8080"
-      - "8888:8888"
+      - "18080:8080"   # Spark UI
+      - "18888:8888"   # Jupyter
     volumes:
       - .:/home/iceberg/local
       - ./warehouse:/home/iceberg/warehouse
       - ./notebooks:/home/iceberg/notebooks
 
+  # -------------------------
+  # Trino
+  # -------------------------
   trino-coordinator:
-    image: 'trinodb/trino:466'
+    image: trinodb/trino:466
     hostname: trino-coordinator
     ports:
-      - '8082:8080'
+      - "18082:8080"
     volumes:
       - ./trino/etc:/etc/trino
     networks:
       - ozone-net
 
+  # -------------------------
+  # Hive Metastore DB
+  # -------------------------
   metastore_db:
     image: postgres:11
-    hostname: metastore_db
+    hostname: metastore-db
     ports:
-      - 5433:5432
+      - "15433:5432"
     environment:
       POSTGRES_USER: hive
       POSTGRES_PASSWORD: hive
       POSTGRES_DB: metastore
-    command: [ "postgres", "-c", "wal_level=logical" ]
+    command: ["postgres", "-c", "wal_level=logical"]
     healthcheck:
-      test: [ "CMD", "psql", "-U", "hive", "-c", "SELECT 1" ]
+      test: ["CMD", "psql", "-U", "hive", "-c", "SELECT 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -122,11 +144,14 @@ services:
     networks:
       - ozone-net
 
+  # -------------------------
+  # Hive Metastore Service
+  # -------------------------
   hive-metastore:
+    image: starburstdata/hive:3.1.2-e.18
     hostname: hive-metastore
-    image: 'starburstdata/hive:3.1.2-e.18'
     ports:
-      - '9084:9083' # Metastore Thrift
+      - "19084:9083"
     environment:
       HIVE_METASTORE_DRIVER: org.postgresql.Driver
       HIVE_METASTORE_JDBC_URL: jdbc:postgresql://metastore_db:5432/metastore
@@ -141,8 +166,6 @@ services:
     depends_on:
       - metastore_db
       - s3g
-    healthcheck:
-      test: bash -c "exec 6<> /dev/tcp/localhost/9083"
     networks:
       - ozone-net
 
