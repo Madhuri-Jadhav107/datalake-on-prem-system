@@ -170,6 +170,8 @@ services:
       AZURE_ADL_REFRESH_TOKEN: ""
       AZURE_STORAGE_ACCOUNT: ""
       AZURE_STORAGE_KEY: ""
+      AZURE_ADL_CREDENTIAL: ""
+      AZURE_ADL_TOKEN_ENDPOINT: ""
     depends_on:
       - metastore_db
       - s3g
