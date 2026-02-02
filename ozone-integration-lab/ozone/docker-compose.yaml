@@ -172,6 +172,11 @@ services:
       AZURE_STORAGE_KEY: ""
       AZURE_ADL_CREDENTIAL: ""
       AZURE_ADL_TOKEN_ENDPOINT: ""
+      AZURE_ADL_REFRESH_URL: ""
+      AWS_ACCESS_KEY_ID: ""
+      AWS_SECRET_ACCESS_KEY: ""
+      GCS_PROJECT_ID: ""
+      GCS_JSON_KEY_FILE_PATH: ""
     depends_on:
       - metastore_db
       - s3g
