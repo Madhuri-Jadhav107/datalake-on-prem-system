@@ -31,7 +31,7 @@ echo "[2/3] Uploading raw file to Ozone (Optional Backup)..."
 docker exec madhuri-ozone-om-1 ozone sh key put /vol1/bucket1/"$filename" /tmp/"$filename" >/dev/null 2>&1
 
 echo "[3/3] Running Iceberg Ingestion Job..."
-echo "Target Table: local.db.$name"
+echo "Target Table: hive_prod.iceberg_db.$name"
 
 # Ensure S3 bucket exists for warehouse (using correct replication for single-node)
 docker exec madhuri-ozone-om-1 ozone sh volume create /s3v >/dev/null 2>&1 || true
@@ -39,7 +39,7 @@ docker exec madhuri-ozone-om-1 ozone sh bucket create /s3v/warehouse-v2 --replic
 
 # Submit Spark job
 # Note: Using s3a for warehouse to ensure compatibility with Trino
-docker exec madhuri-ozone-spark-1 /opt/spark/bin/spark-submit \
+docker exec madhuri-ozone-spark-iceberg-1 /opt/spark/bin/spark-submit \
   --master spark://spark-master:7077 \
   --deploy-mode client \
   --name "IcebergIngest" \
