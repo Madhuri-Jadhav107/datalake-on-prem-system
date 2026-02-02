@@ -35,7 +35,7 @@ echo "Target Table: local.db.$name"
 
 # Ensure S3 bucket exists for warehouse
 docker exec madhuri-ozone-om-1 ozone sh volume create /s3v >/dev/null 2>&1 || true
-docker exec madhuri-ozone-om-1 ozone sh bucket create /s3v/warehouse >/dev/null 2>&1 || true
+docker exec madhuri-ozone-om-1 ozone sh bucket create /s3v/warehouse -t RATIS -r 1 >/dev/null 2>&1 || true
 
 docker exec madhuri-ozone-spark-iceberg-1 bash -c "spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0,org.apache.hadoop:hadoop-aws:3.3.4 --jars /home/iceberg/local/ozone-filesystem.jar --conf spark.driver.extraClassPath=/home/iceberg/local/ozone-filesystem.jar --conf spark.executor.extraClassPath=/home/iceberg/local/ozone-filesystem.jar --conf spark.hadoop.fs.s3a.endpoint=http://s3g:9878 --conf spark.hadoop.fs.s3a.access.key=anyID --conf spark.hadoop.fs.s3a.secret.key=anySecret --conf spark.hadoop.fs.s3a.path.style.access=true --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem --conf spark.sql.defaultCatalog=local --conf spark.sql.catalog.local=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.local.type=hive --conf spark.sql.catalog.local.uri=thrift://hive-metastore:9083 --conf spark.sql.catalog.local.warehouse=s3a://warehouse/ /home/iceberg/local/ingest_to_iceberg.py /home/iceberg/local/$filename $name"
 
