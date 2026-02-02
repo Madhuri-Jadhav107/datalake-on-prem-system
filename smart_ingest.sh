@@ -20,7 +20,7 @@ name="${filename%.*}"
 
 echo ""
 echo "[1/3] Copying $filename to Docker container..."
-docker cp "$filepath" ozone-spark-iceberg-1:/home/iceberg/local/"$filename"
+docker cp "$filepath" madhuri-ozone-spark-iceberg-1:/home/iceberg/local/"$filename"
 if [ $? -ne 0 ]; then
     echo "Error copying file. Please check the path and try again."
     exit 1
@@ -33,7 +33,7 @@ docker exec ozone-om-1 ozone sh key put /vol1/bucket1/"$filename" /tmp/"$filenam
 echo "[3/3] Running Iceberg Ingestion Job..."
 echo "Target Table: local.db.$name"
 
-docker exec ozone-spark-iceberg-1 bash -c "spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0 --jars /home/iceberg/local/ozone-filesystem.jar --conf spark.driver.extraClassPath=/home/iceberg/local/ozone-filesystem.jar --conf spark.executor.extraClassPath=/home/iceberg/local/ozone-filesystem.jar --conf spark.sql.defaultCatalog=local --conf spark.sql.catalog.local=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.local.type=hadoop --conf spark.sql.catalog.local.warehouse=file:///home/iceberg/warehouse/local /home/iceberg/local/ingest_to_iceberg.py /home/iceberg/local/$filename $name"
+docker exec madhuri-ozone-spark-iceberg-1 bash -c "spark-submit --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0 --jars /home/iceberg/local/ozone-filesystem.jar --conf spark.driver.extraClassPath=/home/iceberg/local/ozone-filesystem.jar --conf spark.executor.extraClassPath=/home/iceberg/local/ozone-filesystem.jar --conf spark.sql.defaultCatalog=local --conf spark.sql.catalog.local=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.local.type=hive --conf spark.sql.catalog.local.uri=thrift://hive-metastore:9083 --conf spark.sql.catalog.local.warehouse=ofs://om/vol1/bucket1/warehouse /home/iceberg/local/ingest_to_iceberg.py /home/iceberg/local/$filename $name"
 
 echo ""
 echo "==================================================="
