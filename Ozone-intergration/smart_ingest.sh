@@ -33,6 +33,9 @@ docker exec madhuri-ozone-om-1 ozone sh key put /vol1/bucket1/"$filename" /tmp/"
 echo "[3/3] Running Iceberg Ingestion Job..."
 echo "Target Table: hive_prod.iceberg_db.$name"
 
+# Copy Python script to container
+docker cp ./ozone-integration-lab/ozone/ingest_to_iceberg.py madhuri-ozone-spark-iceberg-1:/home/iceberg/local/ingest_to_iceberg.py
+
 # Ensure S3 bucket exists for warehouse (using correct replication for single-node)
 docker exec madhuri-ozone-om-1 ozone sh volume create /s3v >/dev/null 2>&1 || true
 docker exec madhuri-ozone-om-1 ozone sh bucket create /s3v/warehouse-v2 --replication=1 --type=RATIS >/dev/null 2>&1 || true
@@ -51,8 +54,8 @@ docker exec madhuri-ozone-spark-iceberg-1 /opt/spark/bin/spark-submit \
   --conf spark.sql.catalog.hive_prod.warehouse=s3a://warehouse-v2/ \
   --conf spark.sql.catalog.hive_prod.s3.endpoint=http://s3g:9878 \
   --conf spark.sql.defaultCatalog=hive_prod \
-  /opt/spark/work-dir/ingest_to_iceberg.py \
-  /opt/spark/work-dir/"$filename" "$name"
+  /home/iceberg/local/ingest_to_iceberg.py \
+  /home/iceberg/local/"$filename" "$name"
 
 echo ""
 echo "==================================================="
