@@ -177,6 +177,8 @@ services:
       AWS_SECRET_ACCESS_KEY: ""
       GCS_PROJECT_ID: ""
       GCS_JSON_KEY_FILE_PATH: ""
+      AZURE_ABFS_STORAGE_ACCOUNT: ""
+      AZURE_ABFS_KEY: ""
     depends_on:
       - metastore_db
       - s3g
