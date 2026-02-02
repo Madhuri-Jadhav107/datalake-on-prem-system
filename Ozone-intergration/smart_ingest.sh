@@ -54,6 +54,10 @@ docker exec madhuri-ozone-spark-iceberg-1 /opt/spark/bin/spark-submit \
   --conf spark.sql.catalog.hive_prod.warehouse=s3a://warehouse-v2/ \
   --conf spark.sql.catalog.hive_prod.s3.endpoint=http://s3g:9878 \
   --conf spark.sql.defaultCatalog=hive_prod \
+  --conf spark.hadoop.fs.s3a.access.key=anyID \
+  --conf spark.hadoop.fs.s3a.secret.key=anySecret \
+  --conf spark.hadoop.fs.s3a.endpoint=http://s3g:9878 \
+  --conf spark.hadoop.fs.s3a.path.style.access=true \
   /home/iceberg/local/ingest_to_iceberg.py \
   /home/iceberg/local/"$filename" "$name"
 
