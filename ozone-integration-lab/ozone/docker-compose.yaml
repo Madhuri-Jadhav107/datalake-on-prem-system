@@ -180,6 +180,13 @@ services:
       AZURE_ABFS_STORAGE_ACCOUNT: ""
       AZURE_ABFS_ACCESS_KEY: ""
       AZURE_ABFS_ENDPOINT: ""
+      AZURE_WASB_STORAGE_ACCOUNT: ""
+      AZURE_ABFS_OAUTH: ""
+      AZURE_ABFS_OAUTH_TOKEN_PROVIDER: ""
+      AZURE_ABFS_OAUTH_CLIENT_ID: ""
+      AZURE_ABFS_OAUTH_SECRET: ""
+      AZURE_ABFS_OAUTH_ENDPOINT: ""
+      AZURE_WASB_ACCESS_KEY: ""
     depends_on:
       - metastore_db
       - s3g
