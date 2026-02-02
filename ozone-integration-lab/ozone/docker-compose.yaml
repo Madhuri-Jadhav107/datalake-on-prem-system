@@ -1,0 +1,198 @@
+version: "3.8"
+
+x-common-config: &common-config
+  image: apache/ozone:1.4.0
+  env_file:
+    - docker-config
+  networks:
+    - ozone-net
+
+x-replication: &replication
+  OZONE-SITE.XML_ozone.server.default.replication: "1"
+
+services:
+  # -------------------------
+  # Ozone SCM
+  # -------------------------
+  scm:
+    <<: *common-config
+    hostname: scm
+    command: ["ozone", "scm"]
+    environment:
+      <<: *replication
+      ENSURE_SCM_INITIALIZED: /data/metadata/scm/current/VERSION
+      OZONE-SITE.XML_hdds.scm.safemode.min.datanode: "1"
+    ports:
+      - "19860:9860"
+      - "19876:9876"
+
+  # -------------------------
+  # Ozone OM
+  # -------------------------
+  om:
+    <<: *common-config
+    hostname: om
+    command: ["ozone", "om"]
+    environment:
+      <<: *replication
+      ENSURE_OM_INITIALIZED: /data/metadata/om/current/VERSION
+    ports:
+      - "19862:9862"
+      - "19874:9874"
+    depends_on:
+      - scm
+
+  # -------------------------
+  # Ozone DataNode
+  # -------------------------
+  datanode:
+    <<: *common-config
+    hostname: datanode
+    command: ["ozone", "datanode"]
+    environment:
+      <<: *replication
+    ports:
+      - "29864:19864"
+      - "19882:9882"
+    depends_on:
+      - scm
+
+  # -------------------------
+  # Ozone Recon
+  # -------------------------
+  recon:
+    <<: *common-config
+    hostname: recon
+    command: ["ozone", "recon"]
+    environment:
+      <<: *replication
+    ports:
+      - "19888:9888"
+    depends_on:
+      - scm
+
+  # -------------------------
+  # Ozone S3 Gateway
+  # -------------------------
+  s3g:
+    <<: *common-config
+    hostname: s3g
+    command: ["ozone", "s3g"]
+    environment:
+      <<: *replication
+    ports:
+      - "19878:9878"
+      - "29878:19878"
+    depends_on:
+      - om
+
+  # -------------------------
+  # Spark + Iceberg
+  # -------------------------
+  spark-iceberg:
+    image: tabulario/spark-iceberg
+    hostname: spark-iceberg
+    depends_on:
+      - s3g
+      - scm
+      - om
+    networks:
+      - ozone-net
+    environment:
+      SPARK_HOME: /opt/spark
+    ports:
+      - "18080:8080"   # Spark UI
+      - "18888:8888"   # Jupyter
+    volumes:
+      - .:/home/iceberg/local
+      - ./warehouse:/home/iceberg/warehouse
+      - ./notebooks:/home/iceberg/notebooks
+
+  # -------------------------
+  # Trino
+  # -------------------------
+  trino-coordinator:
+    image: trinodb/trino:466
+    hostname: trino-coordinator
+    ports:
+      - "18082:8080"
+    volumes:
+      - ./trino/etc:/etc/trino
+    networks:
+      - ozone-net
+
+  # -------------------------
+  # Hive Metastore DB
+  # -------------------------
+  metastore_db:
+    image: postgres:11
+    hostname: metastore-db
+    ports:
+      - "15433:5435"
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    command: ["postgres", "-c", "wal_level=logical"]
+    healthcheck:
+      test: ["CMD", "psql", "-U", "hive", "-c", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./postgres:/docker-entrypoint-initdb.d
+    networks:
+      - ozone-net
+
+  # -------------------------
+  # Hive Metastore Service
+  # -------------------------
+  hive-metastore:
+    image: starburstdata/hive:3.1.2-e.18
+    hostname: hive-metastore
+    ports:
+      - "19084:9085"
+    environment:
+      HIVE_METASTORE_DRIVER: org.postgresql.Driver
+      HIVE_METASTORE_JDBC_URL: jdbc:postgresql://metastore_db:5432/metastore
+      HIVE_METASTORE_USER: hive
+      HIVE_METASTORE_PASSWORD: hive
+      HIVE_METASTORE_WAREHOUSE_DIR: s3a://hive-warehouse/
+      S3_ENDPOINT: http://s3g:9878
+      S3_ACCESS_KEY: anyID
+      S3_SECRET_KEY: anySecret
+      S3_PATH_STYLE_ACCESS: "true"
+      HIVE_METASTORE_USERS_IN_ADMIN_ROLE: "admin"
+      REGION: "us-east-1"
+      GOOGLE_CLOUD_KEY_FILE_PATH: ""
+      AZURE_ADL_CLIENT_ID: ""
+      AZURE_ADL_CLIENT_SECRET: ""
+      AZURE_ADL_REFRESH_TOKEN: ""
+      AZURE_STORAGE_ACCOUNT: ""
+      AZURE_STORAGE_KEY: ""
+      AZURE_ADL_CREDENTIAL: ""
+      AZURE_ADL_TOKEN_ENDPOINT: ""
+      AZURE_ADL_REFRESH_URL: ""
+      AWS_ACCESS_KEY_ID: ""
+      AWS_SECRET_ACCESS_KEY: ""
+      GCS_PROJECT_ID: ""
+      GCS_JSON_KEY_FILE_PATH: ""
+      AZURE_ABFS_STORAGE_ACCOUNT: ""
+      AZURE_ABFS_ACCESS_KEY: ""
+      AZURE_ABFS_ENDPOINT: ""
+      AZURE_WASB_STORAGE_ACCOUNT: ""
+      AZURE_ABFS_OAUTH: ""
+      AZURE_ABFS_OAUTH_TOKEN_PROVIDER: ""
+      AZURE_ABFS_OAUTH_CLIENT_ID: ""
+      AZURE_ABFS_OAUTH_SECRET: ""
+      AZURE_ABFS_OAUTH_ENDPOINT: ""
+      AZURE_WASB_ACCESS_KEY: ""
+    depends_on:
+      - metastore_db
+      - s3g
+    networks:
+      - ozone-net
+
+networks:
+  ozone-net:
+    driver: bridge

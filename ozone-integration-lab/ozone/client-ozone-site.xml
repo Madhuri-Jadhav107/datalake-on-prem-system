@@ -1,0 +1,10 @@
+<configuration>
+  <property>
+    <name>ozone.replication</name>
+    <value>1</value>
+  </property>
+  <property>
+    <name>ozone.replication.type</name>
+    <value>RATIS</value>
+  </property>
+</configuration>
