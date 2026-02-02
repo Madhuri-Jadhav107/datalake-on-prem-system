@@ -43,7 +43,7 @@ docker exec madhuri-ozone-om-1 ozone sh bucket create /s3v/warehouse-v2 --replic
 # Submit Spark job
 # Note: Using s3a for warehouse to ensure compatibility with Trino
 docker exec madhuri-ozone-spark-iceberg-1 /opt/spark/bin/spark-submit \
-  --master spark://spark-master:7077 \
+  --master local[*] \
   --deploy-mode client \
   --name "IcebergIngest" \
   --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4 \
