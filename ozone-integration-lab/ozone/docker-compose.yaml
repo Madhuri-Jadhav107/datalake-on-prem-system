@@ -163,6 +163,7 @@ services:
       S3_SECRET_KEY: anySecret
       S3_PATH_STYLE_ACCESS: "true"
       HIVE_METASTORE_USERS_IN_ADMIN_ROLE: "admin"
+      REGION: "us-east-1"
     depends_on:
       - metastore_db
       - s3g
