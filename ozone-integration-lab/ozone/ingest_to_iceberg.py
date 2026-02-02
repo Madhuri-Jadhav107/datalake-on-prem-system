@@ -27,9 +27,9 @@ else:
     ozone_path = "ofs://om/vol1/bucket1/large_sample.csv"
 
 if len(sys.argv) > 2:
-    table_name = f"local.db.{sys.argv[2]}"
+    table_name = f"hive_prod.iceberg_db.{sys.argv[2]}"
 else:
-    table_name = "local.db.large_transactions"
+    table_name = "hive_prod.iceberg_db.large_transactions"
 
 print(f"--- Spark Session Started ---")
 print(f"Target Input: {ozone_path}")
@@ -37,7 +37,7 @@ print(f"Target Table: {table_name}")
 
 try:
     # Ensure database exists
-    spark.sql("CREATE NAMESPACE IF NOT EXISTS local.db")
+    spark.sql("CREATE NAMESPACE IF NOT EXISTS hive_prod.iceberg_db")
     
     # Read CSV from Ozone
     df = spark.read.option("header", "true") \
