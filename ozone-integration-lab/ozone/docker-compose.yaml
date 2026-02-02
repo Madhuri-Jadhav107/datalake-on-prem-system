@@ -9,6 +9,7 @@ x-common-config: &common-config
 
 x-replication: &replication
   OZONE-SITE.XML_ozone.server.default.replication: "1"
+  OZONE-SITE.XML_ozone.replication: "1"
 
 services:
   # -------------------------
@@ -80,6 +81,9 @@ services:
     command: ["ozone", "s3g"]
     environment:
       <<: *replication
+      OZONE_REPLICATION_FACTOR: "1"
+      OZONE-SITE.XML_ozone.replication: "1"
+      OZONE-SITE.XML_ozone.server.default.replication: "1"
     ports:
       - "19878:9878"
       - "29878:19878"
