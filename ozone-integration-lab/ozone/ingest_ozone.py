@@ -20,6 +20,7 @@ def create_spark_session():
         .config(f"spark.sql.catalog.{CATALOG_NAME}", "org.apache.iceberg.spark.SparkCatalog") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.type", "hadoop") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.warehouse", WAREHOUSE_PATH) \
+        .config(f"spark.sql.catalog.{CATALOG_NAME}.uri", "") \
         .config("spark.hadoop.fs.ofs.impl", "org.apache.hadoop.fs.ozone.OzoneFileSystem") \
         .config("spark.hadoop.fs.AbstractFileSystem.ofs.impl", "org.apache.hadoop.fs.ozone.OzFs") \
         .config("spark.hadoop.ozone.om.address", "om:9862") \
