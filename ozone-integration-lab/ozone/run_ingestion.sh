@@ -16,25 +16,23 @@ fi
 INPUT_FILE=$1
 TABLE_NAME=$2
 
-# Create a container-accessible path for the input file
-# We assume the user provides a path relative to the current directory or absolute.
-# Since we mount $(pwd) to /home/iceberg/local, we need to handle the path mapping.
-# For simplicity in this lab, we require the file to be in the current directory or a subdirectory.
-# If it's a simple filename, we prepend /home/iceberg/local/
+# Strip host-side prefix if present
+# We assume the user might provide paths starting with 'ozone-integration-lab/ozone/'
+# or just relative to it.
+MAPPED_PATH=$INPUT_FILE
+# Strip leading ./ if present
+MAPPED_PATH=${MAPPED_PATH#./}
+# Strip host-side lab folder prefix if present
+MAPPED_PATH=${MAPPED_PATH#ozone-integration-lab/ozone/}
 
-# Since we mount ./ (ozone-integration-lab/ozone) to /home/iceberg/local,
-# any path relative to the lab folder works if we prepend /home/iceberg/local/
-
-CONTAINER_PATH="/home/iceberg/local/$INPUT_FILE"
+# The container maps its /home/iceberg/local to our ozone-integration-lab/ozone folder
+CONTAINER_PATH="file:///home/iceberg/local/$MAPPED_PATH"
 
 echo "Submitting Spark job for file: $INPUT_FILE -> Table: $TABLE_NAME"
 
-docker exec madhuri-ozone-spark-iceberg-1 spark-submit \
-  --master local[*] \
-  --conf spark.hadoop.ozone.replication=1 \
-  --conf spark.hadoop.ozone.replication.type=RATIS \
-  --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4 \
-  /home/iceberg/local/ingest_trino.py "$CONTAINER_PATH" "$TABLE_NAME" > ingest_trino_log.txt 2>&1
+# We use python3 ingest_trino.py because it already contains 
+# all the complex Spark/Iceberg/S3A configurations we fixed.
+docker exec madhuri-ozone-spark-iceberg-1 python3 /home/iceberg/local/ingest_trino.py "$CONTAINER_PATH" "$TABLE_NAME" > ingest_trino_log.txt 2>&1 &
 
-echo "Ingestion job submitted. Logs redirected to 'ingest_trino_log.txt'."
-echo "To check logs run: cat ingest_trino_log.txt"
+echo "Ingestion job submitted in background. Logs redirected to 'ingest_trino_log.txt'."
+echo "To check logs run: tail -f ingest_trino_log.txt"
