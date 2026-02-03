@@ -55,6 +55,19 @@ def main():
     spark = create_spark_session()
 
     try:
+        # Create a specific database pointing to our existing bucket
+        # This avoids the 'hive-warehouse' bucket which might not exist
+        db_name = "trino_db"
+        db_location = "s3at://bucket1/trino_db" 
+        # Note: Using s3a:// because valid connection to Ozone S3G requires it for Spark 3.5 w/ Hadoop 3.3
+        # However, we configured s3 to use S3A impl, so s3:// works too.
+        # Let's stick to the warehouse path we defined globally.
+        
+        print(f"Creating database {db_name} if it doesn't exist...")
+        spark.sql(f"CREATE DATABASE IF NOT EXISTS {CATALOG_NAME}.{db_name} LOCATION '{WAREHOUSE_PATH}/{db_name}'")
+        
+        full_table_name = f"{CATALOG_NAME}.{db_name}.{table_name}"
+        
         print(f"Reading CSV data from {input_file}...")
         df = spark.read.option("header", "true").option("inferSchema", "true").csv(input_file)
         df.printSchema()
