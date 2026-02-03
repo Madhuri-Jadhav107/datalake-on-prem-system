@@ -7,7 +7,7 @@
 # 3. Using local master
 docker exec madhuri-ozone-spark-iceberg-1 spark-submit \
   --master local[*] \
-  --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.ozone:ozone-filesystem-hadoop3:1.4.0,com.google.protobuf:protobuf-java:3.25.5 \
+  --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.ozone:ozone-filesystem-hadoop3:1.4.0,com.google.protobuf:protobuf-java:2.5.0 \
   /home/iceberg/local/ingest_ozone.py /home/iceberg/local/sample.csv custom_table > ingest_log.txt 2>&1
 
 echo "Ingestion job submitted. Logs redirected to 'ingest_log.txt'."
