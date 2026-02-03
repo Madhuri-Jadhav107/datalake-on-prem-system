@@ -29,6 +29,7 @@ def create_spark_session():
         .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.connection.ssl.enabled", "false") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+        .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.directory.marker.retention", "keep") \
         .config("spark.sql.defaultCatalog", CATALOG_NAME) \
         \
         .config("spark.hadoop.fs.s3a.endpoint", "http://s3g:9878") \
@@ -38,6 +39,7 @@ def create_spark_session():
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+        .config("spark.hadoop.fs.s3a.directory.marker.retention", "keep") \
         .getOrCreate()
     
     spark.sparkContext.setLogLevel("INFO")
