@@ -34,6 +34,11 @@ def create_spark_session():
 def main():
     # Parse args
     input_file = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_INPUT
+    
+    # Force local file protocol if not present, to avoid reading from Ozone (defaultFS)
+    if not input_file.startswith("file://") and not input_file.startswith("ofs://") and not input_file.startswith("o3fs://"):
+        input_file = f"file://{input_file}"
+    
     table_name = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_TABLE
     
     full_table_name = f"{CATALOG_NAME}.default.{table_name}"
