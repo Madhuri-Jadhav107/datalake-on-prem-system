@@ -30,9 +30,13 @@ CONTAINER_PATH="file:///home/iceberg/local/$MAPPED_PATH"
 
 echo "Submitting Spark job for file: $INPUT_FILE -> Table: $TABLE_NAME"
 
-# We use python3 ingest_trino.py because it already contains 
-# all the complex Spark/Iceberg/S3A configurations we fixed.
-docker exec madhuri-ozone-spark-iceberg-1 python3 /home/iceberg/local/ingest_trino.py "$CONTAINER_PATH" "$TABLE_NAME" > ingest_trino_log.txt 2>&1 &
+# Using spark-submit to ensure --packages are correctly loaded into the classpath
+docker exec madhuri-ozone-spark-iceberg-1 spark-submit \
+  --master local[*] \
+  --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4 \
+  --conf spark.hadoop.ozone.replication=1 \
+  --conf spark.hadoop.ozone.replication.type=RATIS \
+  /home/iceberg/local/ingest_trino.py "$CONTAINER_PATH" "$TABLE_NAME" > ingest_trino_log.txt 2>&1 &
 
 echo "Ingestion job submitted in background. Logs redirected to 'ingest_trino_log.txt'."
 echo "To check logs run: tail -f ingest_trino_log.txt"

@@ -45,7 +45,7 @@ def create_spark_session():
         .config("spark.hadoop.fs.s3a.retry.interval", "500ms") \
         .getOrCreate()
     
-    spark.sparkContext.setLogLevel("ERROR")
+    spark.sparkContext.setLogLevel("INFO")
     return spark
 
 def main():
