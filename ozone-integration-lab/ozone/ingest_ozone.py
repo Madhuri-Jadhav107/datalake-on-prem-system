@@ -16,8 +16,7 @@ def create_spark_session():
     print("Initializing Spark Session with Ozone + Iceberg config...")
     spark = SparkSession.builder \
         .appName("OzoneIcebergIngest") \
-        .config("spark.driver.userClassPathFirst", "true") \
-        .config("spark.executor.userClassPathFirst", "true") \
+        .appName("OzoneIcebergIngest") \
         .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}", "org.apache.iceberg.spark.SparkCatalog") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.type", "hadoop") \
