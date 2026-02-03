@@ -40,9 +40,12 @@ def create_spark_session():
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3a.directory.marker.retention", "keep") \
+        .config("spark.hadoop.fs.s3a.fast.upload", "true") \
+        .config("spark.hadoop.fs.s3a.retry.limit", "10") \
+        .config("spark.hadoop.fs.s3a.retry.interval", "500ms") \
         .getOrCreate()
     
-    spark.sparkContext.setLogLevel("INFO")
+    spark.sparkContext.setLogLevel("ERROR")
     return spark
 
 def main():
@@ -54,35 +57,27 @@ def main():
         input_file = f"file://{input_file}"
     
     table_name = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_TABLE
-    full_table_name = f"{CATALOG_NAME}.default.{table_name}"
     
-    print(f"--- Configuration ---")
-    print(f"Input File: {input_file}")
-    print(f"Target Iceberg Table: {full_table_name}")
-    print(f"Warehouse Location: {WAREHOUSE_PATH}")
-    print("---------------------")
-
     spark = create_spark_session()
 
     try:
-        # Create a specific database pointing to our existing bucket
-        # This avoids the 'hive-warehouse' bucket which might not exist
         db_name = "trino_db"
-        db_location = "s3at://bucket1/trino_db" 
-        # Note: Using s3a:// because valid connection to Ozone S3G requires it for Spark 3.5 w/ Hadoop 3.3
-        # However, we configured s3 to use S3A impl, so s3:// works too.
-        # Let's stick to the warehouse path we defined globally.
+        full_table_name = f"{CATALOG_NAME}.{db_name}.{table_name}"
         
+        print(f"--- Configuration ---")
+        print(f"Input File: {input_file}")
+        print(f"Target Iceberg Table: {full_table_name}")
+        print(f"Warehouse Location: {WAREHOUSE_PATH}")
+        print("---------------------")
+
         print(f"Creating database {db_name} if it doesn't exist...")
         spark.sql(f"CREATE DATABASE IF NOT EXISTS {CATALOG_NAME}.{db_name} LOCATION '{WAREHOUSE_PATH}/{db_name}'")
         
-        full_table_name = f"{CATALOG_NAME}.{db_name}.{table_name}"
-        
         print(f"Reading CSV data from {input_file}...")
         df = spark.read.option("header", "true").option("inferSchema", "true").csv(input_file)
-        df.printSchema()
-
+        
         print(f"Writing data to {full_table_name}...")
+        # Use createOrReplace to ensure we can overwrite existing tables
         df.writeTo(full_table_name).createOrReplace()
         print("Write operation completed.")
 
@@ -93,9 +88,11 @@ def main():
         result_df.show(5)
 
     except Exception as e:
-        print(f"\n[ERROR] Ingestion failed with exception:")
+        print("\n" + "!" * 60)
+        print("INGESTION CRITICAL ERROR:")
         import traceback
-        traceback.print_exc()
+        traceback.print_exc(file=sys.stdout)
+        print("!" * 60 + "\n")
         sys.exit(1)
     finally:
         spark.stop()
