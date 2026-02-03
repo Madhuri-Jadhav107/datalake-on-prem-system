@@ -22,8 +22,8 @@ def create_spark_session():
         .config(f"spark.sql.catalog.{CATALOG_NAME}.warehouse", WAREHOUSE_PATH) \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.uri", "") \
         .config("spark.sql.defaultCatalog", CATALOG_NAME) \
-        .config("spark.hadoop.fs.ofs.impl", "org.apache.hadoop.fs.ozone.OzoneFileSystem") \
-        .config("spark.hadoop.fs.AbstractFileSystem.ofs.impl", "org.apache.hadoop.fs.ozone.OzFs") \
+        .config("spark.hadoop.fs.ofs.impl", "org.apache.hadoop.fs.ozone.RootedOzoneFileSystem") \
+        .config("spark.hadoop.fs.AbstractFileSystem.ofs.impl", "org.apache.hadoop.fs.ozone.RootedOzFs") \
         .config("spark.hadoop.ozone.om.address", "om:9862") \
         .config("spark.hadoop.ozone.scm.client.address", "scm:9860") \
         .config("spark.hadoop.fs.defaultFS", "ofs://om/") \
