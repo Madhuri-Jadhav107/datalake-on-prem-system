@@ -22,10 +22,12 @@ TABLE_NAME=$2
 # For simplicity in this lab, we require the file to be in the current directory or a subdirectory.
 # If it's a simple filename, we prepend /home/iceberg/local/
 
-FILENAME=$(basename "$INPUT_FILE")
-CONTAINER_PATH="/home/iceberg/local/$FILENAME"
+# Since we mount ./ (ozone-integration-lab/ozone) to /home/iceberg/local,
+# any path relative to the lab folder works if we prepend /home/iceberg/local/
 
-echo "Submitting Spark job for file: $FILENAME -> Table: $TABLE_NAME"
+CONTAINER_PATH="/home/iceberg/local/$INPUT_FILE"
+
+echo "Submitting Spark job for file: $INPUT_FILE -> Table: $TABLE_NAME"
 
 docker exec madhuri-ozone-spark-iceberg-1 spark-submit \
   --master local[*] \
