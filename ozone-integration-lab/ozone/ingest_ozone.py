@@ -4,8 +4,8 @@ import os
 
 # --- Configuration ---
 # Define the Iceberg Catalog pointing to Ozone
-# We use a Hadoop catalog because it's simplest for file-system based storage like OFS without a separate Metastore service for this specific test
 CATALOG_NAME = "ozone_iceberg"
+# Using explicit hostname 'om' which matches docker-compose service name
 WAREHOUSE_PATH = "ofs://om/vol1/bucket1/iceberg"
 
 # Input/Output defaults
@@ -22,10 +22,13 @@ def create_spark_session():
         .config(f"spark.sql.catalog.{CATALOG_NAME}.warehouse", WAREHOUSE_PATH) \
         .config("spark.hadoop.fs.ofs.impl", "org.apache.hadoop.fs.ozone.OzoneFileSystem") \
         .config("spark.hadoop.fs.AbstractFileSystem.ofs.impl", "org.apache.hadoop.fs.ozone.OzFs") \
+        .config("spark.hadoop.ozone.om.address", "om:9862") \
+        .config("spark.hadoop.ozone.scm.client.address", "scm:9860") \
+        .config("spark.hadoop.fs.defaultFS", "ofs://om/") \
         .getOrCreate()
     
-    # Set log level to reduce noise
-    spark.sparkContext.setLogLevel("ERROR")
+    # Set log level to INFO to see more details if it fails
+    spark.sparkContext.setLogLevel("INFO")
     return spark
 
 def main():
@@ -52,6 +55,17 @@ def main():
 
         # 2. Write to Ozone (Iceberg)
         print(f"Writing data to {full_table_name}...")
+        
+        # Check if we can list the directory first (Connectivity check)
+        try:
+            print("Checking connectivity to Ozone...")
+            fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+            path = spark._jvm.org.apache.hadoop.fs.Path("/vol1/bucket1")
+            exists = fs.exists(path)
+            print(f"Target bucket exists: {exists}")
+        except Exception as conn_err:
+            print(f"WARNING: Ozone connectivity check failed: {conn_err}")
+
         # using createOrReplace for idempotency during testing
         df.writeTo(full_table_name).createOrReplace()
         print("Write operation completed.")
@@ -64,7 +78,9 @@ def main():
         result_df.show(5)
 
     except Exception as e:
-        print(f"\n[ERROR] Ingestion failed: {e}")
+        print(f"\n[ERROR] Ingestion failed with exception:")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
     finally:
         spark.stop()
