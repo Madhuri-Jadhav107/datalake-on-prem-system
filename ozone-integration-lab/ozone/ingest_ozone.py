@@ -4,7 +4,7 @@ import os
 
 # --- Configuration ---
 # Define the Iceberg Catalog pointing to Ozone
-CATALOG_NAME = "ozone_iceberg"
+CATALOG_NAME = "ozone_hadoop_catalog"
 # Using explicit hostname 'om' which matches docker-compose service name
 WAREHOUSE_PATH = "ofs://om/vol1/bucket1/iceberg"
 
@@ -27,8 +27,16 @@ def create_spark_session():
         .config("spark.hadoop.fs.defaultFS", "ofs://om/") \
         .getOrCreate()
     
-    # Set log level to INFO to see more details if it fails
+    # Set log level to INFO
     spark.sparkContext.setLogLevel("INFO")
+    
+    # Debug: Print all configurations to see if something is interfering
+    print("\n--- Spark Configuration ---")
+    for k, v in spark.sparkContext.getConf().getAll():
+        if "iceberg" in k or "ozone" in k:
+            print(f"{k} = {v}")
+    print("---------------------------\n")
+
     return spark
 
 def main():
@@ -41,12 +49,14 @@ def main():
     
     table_name = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_TABLE
     
+    # Update catalog name in table reference
     full_table_name = f"{CATALOG_NAME}.default.{table_name}"
     
     print(f"--- Configuration ---")
     print(f"Input File: {input_file}")
     print(f"Target Iceberg Table: {full_table_name}")
     print(f"Warehouse Location: {WAREHOUSE_PATH}")
+    print(f"Catalog Name: {CATALOG_NAME}")
     print("---------------------")
 
     spark = create_spark_session()
