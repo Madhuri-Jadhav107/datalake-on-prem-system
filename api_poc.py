@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import HTMLResponse
 import trino
 import os
 import shutil
@@ -123,3 +124,61 @@ async def upload_and_ingest(table_name: str, file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@app.get("/view/{table_name}", response_class=HTMLResponse)
+async def view_table_html(table_name: str, limit: int = 20):
+    """Fetches records and displays them in a beautiful HTML table."""
+    try:
+        conn = get_trino_conn()
+        cur = conn.cursor()
+        
+        if not table_name.isidentifier():
+             raise HTTPException(status_code=400, detail="Invalid table name")
+
+        cur.execute(f"SELECT * FROM {table_name} LIMIT {limit}")
+        columns = [desc[0] for desc in cur.description]
+        rows = cur.fetchall()
+
+        # Build HTML with CSS
+        html_content = f"""
+        <html>
+            <head>
+                <title>Data Lake View: {table_name}</title>
+                <style>
+                    body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background-color: #f8f9fa; }}
+                    h1 {{ color: #2c3e50; text-transform: uppercase; letter-spacing: 2px; }}
+                    table {{ border-collapse: collapse; width: 100%; background: white; box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }}
+                    th, td {{ padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }}
+                    th {{ background-color: #34495e; color: white; font-weight: 600; }}
+                    tr:hover {{ background-color: #f1f1f1; }}
+                    .container {{ max-width: 1200px; margin: auto; }}
+                    .badge {{ background: #27ae60; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Table: {table_name} <span class="badge">Iceberg</span></h1>
+                    <p>Displaying top {limit} records from <strong>{CATALOG}.{SCHEMA}</strong></p>
+                    <table>
+                        <thead>
+                            <tr>{" ".join([f"<th>{col}</th>" for col in columns])}</tr>
+                        </thead>
+                        <tbody>
+        """
+        
+        for row in rows:
+            html_content += f"<tr>"
+            for val in row:
+                html_content += f"<td>{val}</td>"
+            html_content += "</tr>"
+
+        html_content += """
+                        </tbody>
+                    </table>
+                </div>
+            </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        return HTMLResponse(content=f"<h1>Error</h1><p>{str(e)}</p>", status_code=500)
