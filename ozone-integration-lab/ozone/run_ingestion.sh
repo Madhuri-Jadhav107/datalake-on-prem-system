@@ -28,10 +28,18 @@ MAPPED_PATH=${MAPPED_PATH#ozone-integration-lab/ozone/}
 # The container maps its /home/iceberg/local to our ozone-integration-lab/ozone folder
 CONTAINER_PATH="file:///home/iceberg/local/$MAPPED_PATH"
 
-echo "Submitting Spark job for file: $INPUT_FILE -> Table: $TABLE_NAME"
+# Dynamic detection of Spark container name to support different project prefixes (e.g., madhuri-)
+SPARK_CONTAINER=$(docker ps --filter "label=com.docker.compose.service=spark-iceberg" --format "{{.Names}}" | head -n 1)
+
+if [ -z "$SPARK_CONTAINER" ]; then
+    echo "Error: Could not find Spark container. Is the project running?"
+    exit 1
+fi
+
+echo "Submitting Spark job for file: $INPUT_FILE -> Table: $TABLE_NAME (Container: $SPARK_CONTAINER)"
 
 # Using spark-submit to ensure --packages are correctly loaded into the classpath
-docker exec madhuri-ozone-spark-iceberg-1 spark-submit \
+docker exec $SPARK_CONTAINER spark-submit \
   --master local[*] \
   --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4 \
   --conf spark.hadoop.ozone.replication=1 \

@@ -18,9 +18,18 @@ fi
 filename=$(basename "$filepath")
 name="${filename%.*}"
 
+# Dynamic detection of containers
+SPARK_CONTAINER=$(docker ps --filter "label=com.docker.compose.service=spark-iceberg" --format "{{.Names}}" | head -n 1)
+OM_CONTAINER=$(docker ps --filter "label=com.docker.compose.service=om" --format "{{.Names}}" | head -n 1)
+
+if [ -z "$SPARK_CONTAINER" ]; then
+    echo "Error: Could not find Spark container. Is the project running?"
+    exit 1
+fi
+
 echo ""
-echo "[1/3] Copying $filename to Docker container..."
-docker cp "$filepath" madhuri-ozone-spark-iceberg-1:/home/iceberg/local/"$filename"
+echo "[1/3] Copying $filename to Docker container ($SPARK_CONTAINER)..."
+docker cp "$filepath" $SPARK_CONTAINER:/home/iceberg/local/"$filename"
 if [ $? -ne 0 ]; then
     echo "Error copying file. Please check the path and try again."
     exit 1
@@ -28,21 +37,21 @@ fi
 
 echo "[2/3] Uploading raw file to Ozone (Optional Backup)..."
 # Using a generic approach, errors suppressed to match .bat behavior
-docker exec madhuri-ozone-om-1 ozone sh key put /vol1/bucket1/"$filename" /tmp/"$filename" >/dev/null 2>&1
+docker exec $OM_CONTAINER ozone sh key put /vol1/bucket1/"$filename" /tmp/"$filename" >/dev/null 2>&1
 
 echo "[3/3] Running Iceberg Ingestion Job..."
 echo "Target Table: hive_prod.iceberg_db.$name"
 
 # Copy Python script to container
-docker cp ./ozone-integration-lab/ozone/ingest_to_iceberg.py madhuri-ozone-spark-iceberg-1:/home/iceberg/local/ingest_to_iceberg.py
+docker cp ./ozone-integration-lab/ozone/ingest_to_iceberg.py $SPARK_CONTAINER:/home/iceberg/local/ingest_to_iceberg.py
 
 # Ensure S3 bucket exists for warehouse (using correct replication for single-node)
-docker exec madhuri-ozone-om-1 ozone sh volume create /s3v >/dev/null 2>&1 || true
-docker exec madhuri-ozone-om-1 ozone sh bucket create /s3v/warehouse-v2 --replication=1 --type=RATIS >/dev/null 2>&1 || true
+docker exec $OM_CONTAINER ozone sh volume create /s3v >/dev/null 2>&1 || true
+docker exec $OM_CONTAINER ozone sh bucket create /s3v/warehouse-v2 --replication=1 --type=RATIS >/dev/null 2>&1 || true
 
 # Fetch S3 credentials dynamically
 echo "Fetching S3 credentials..."
-CREDS_OUTPUT=$(docker exec madhuri-ozone-om-1 ozone s3 getsecret -u hadoop 2>/dev/null)
+CREDS_OUTPUT=$(docker exec $OM_CONTAINER ozone s3 getsecret -u hadoop 2>/dev/null)
 if [ $? -eq 0 ] && [ ! -z "$CREDS_OUTPUT" ]; then
     ACCESS_KEY=$(echo "$CREDS_OUTPUT" | grep -o "awsAccessKey=[^ ]*" | cut -d= -f2 | tr -d '\r')
     SECRET_KEY=$(echo "$CREDS_OUTPUT" | grep -o "awsSecret=[^ ]*" | cut -d= -f2 | tr -d '\r')
@@ -55,7 +64,7 @@ fi
 
 # Submit Spark job
 # Note: Using s3a for warehouse to ensure compatibility with Trino
-docker exec madhuri-ozone-spark-iceberg-1 /opt/spark/bin/spark-submit \
+docker exec $SPARK_CONTAINER /opt/spark/bin/spark-submit \
   --master local[*] \
   --deploy-mode client \
   --name "IcebergIngest" \
