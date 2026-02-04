@@ -225,18 +225,47 @@ async def dashboard_view(table_name: str, search: Optional[str] = None):
 
 @app.post("/insert/{table_name}")
 async def insert_record(table_name: str, request: Request):
-    """Handles manual record insertion into Trino."""
+    """Handles manual record insertion into Trino with automatic type casting."""
     try:
         form_data = await request.form()
-        cols = ", ".join(form_data.keys())
-        vals = ", ".join([f"'{v}'" if not str(v).replace('.','',1).isdigit() else str(v) for v in form_data.values()])
-        
         conn = get_trino_conn()
         cur = conn.cursor()
-        cur.execute(f"INSERT INTO {table_name} ({cols}) VALUES ({vals})")
+        
+        # 1. Fetch column types from the table to handle strict Trino typing
+        cur.execute(f"DESCRIBE {table_name}")
+        schema_info = {row[0]: row[1] for row in cur.fetchall()} # {col_name: type_name}
+        
+        cols = []
+        vals = []
+        params = []
+        
+        for col, val in form_data.items():
+            if col not in schema_info: continue
+            cols.append(col)
+            
+            # 2. Cast string values from form to the correct Trino type
+            col_type = schema_info[col].lower()
+            if "int" in col_type:
+                vals.append(int(val) if val else 0)
+            elif "double" in col_type or "decimal" in col_type or "real" in col_type:
+                vals.append(float(val) if val else 0.0)
+            else:
+                vals.append(str(val))
+            
+            params.append("?")
+
+        cols_str = ", ".join(cols)
+        params_str = ", ".join(params)
+        
+        # 3. Use parameterized query to prevent SQL injection and fix formatting
+        query = f"INSERT INTO {table_name} ({cols_str}) VALUES ({params_str})"
+        cur.execute(query, vals)
+        
         return RedirectResponse(url=f"/view/{table_name}", status_code=303)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Provide better error feedback
+        print(f"Insert Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Insert failed: {str(e)}")
 
 @app.post("/delete/{table_name}/{record_id}")
 async def delete_record(table_name: str, record_id: str):
@@ -244,14 +273,22 @@ async def delete_record(table_name: str, record_id: str):
     try:
         conn = get_trino_conn()
         cur = conn.cursor()
-        # Assume first column name is 'id' or get it
+        
+        # Get the prime column (usually ID)
         cur.execute(f"DESCRIBE {table_name}")
-        id_col = cur.fetchone()[0]
+        schema = cur.fetchall()
+        id_col = schema[0][0]
+        id_type = schema[0][1].lower()
         
-        query = f"DELETE FROM {table_name} WHERE {id_col} = "
-        query += f"{record_id}" if record_id.isdigit() else f"'{record_id}'"
-        
-        cur.execute(query)
+        # Cast the ID correctly
+        if "int" in id_type:
+            val = int(record_id)
+        elif "double" in id_type or "real" in id_type:
+            val = float(record_id)
+        else:
+            val = record_id
+            
+        cur.execute(f"DELETE FROM {table_name} WHERE {id_col} = ?", (val,))
         return RedirectResponse(url=f"/view/{table_name}", status_code=303)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
