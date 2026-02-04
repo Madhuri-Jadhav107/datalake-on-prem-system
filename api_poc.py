@@ -150,9 +150,16 @@ async def dashboard_view(table_name: str, search: Optional[str] = None):
         table_rows = ""
         for r in rows:
             row_cells = "".join([f"<td>{v}</td>" for v in r])
-            # Add a delete button for each row (using first column as ID)
-            delete_btn = f'<td><form action="/delete/{table_name}/{r[0]}" method="POST" style="margin:0"><button class="btn-delete">Delete</button></form></td>'
-            table_rows += f"<tr>{row_cells}{delete_btn}</tr>"
+            # Add Edit and Delete buttons for each row (using first column as ID)
+            actions = f"""
+                <td style="display:flex; gap:5px">
+                    <a href="/edit/{table_name}/{r[0]}" class="btn-edit" style="text-decoration:none">Edit</a>
+                    <form action="/delete/{table_name}/{r[0]}" method="POST" style="margin:0">
+                        <button class="btn-delete">Delete</button>
+                    </form>
+                </td>
+            """
+            table_rows += f"<tr>{row_cells}{actions}</tr>"
 
         return f"""
         <html>
@@ -167,6 +174,7 @@ async def dashboard_view(table_name: str, search: Optional[str] = None):
                     th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #eee; }}
                     th {{ background: #f8f9fa; color: #555; text-transform: uppercase; font-size: 0.85em; }}
                     .btn-add {{ background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; }}
+                    .btn-edit {{ background: #f39c12; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; }}
                     .btn-delete {{ background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; }}
                     .search-box {{ padding: 10px; width: 300px; border: 1px solid #ddd; border-radius: 6px; }}
                     .snapshot-card ul {{ padding: 0; list-style: none; font-size: 0.9em; }}
@@ -223,6 +231,101 @@ async def dashboard_view(table_name: str, search: Optional[str] = None):
     except Exception as e:
         return f"<h1>Error loading dashboard</h1><p>{str(e)}</p>"
 
+@app.get("/edit/{table_name}/{record_id}", response_class=HTMLResponse)
+async def edit_record_page(table_name: str, record_id: str):
+    """Shows a form to edit an existing record."""
+    try:
+        conn = get_trino_conn()
+        cur = conn.cursor()
+        
+        cur.execute(f"DESCRIBE {table_name}")
+        schema = cur.fetchall()
+        id_col = schema[0][0]
+        
+        # Fetch current values
+        query = f"SELECT * FROM {table_name} WHERE {id_col} = "
+        query += f"{record_id}" if record_id.isdigit() else f"'{record_id}'"
+        cur.execute(query)
+        columns = [desc[0] for desc in cur.description]
+        row = cur.fetchone()
+        
+        if not row:
+            return f"<h1>Record not found</h1>"
+            
+        form_fields = ""
+        for col, val in zip(columns, row):
+            readonly = "readonly style='background:#eee'" if col == id_col else ""
+            form_fields += f"""
+            <div style="margin-bottom:15px">
+                <label style="display:block; font-weight:600">{col}</label>
+                <input type="text" name="{col}" value="{val}" {readonly} style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px">
+            </div>
+            """
+
+        return f"""
+        <html>
+            <head>
+                <title>Edit Record: {record_id}</title>
+                <style>
+                    body {{ font-family: 'Segoe UI', system-ui; margin: 40px; background: #f4f7f6; }}
+                    .card {{ background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }}
+                    .btn-save {{ background: #f39c12; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 1em; }}
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h2>Edit Record in {table_name}</h2>
+                    <form action="/update/{table_name}/{record_id}" method="POST">
+                        {form_fields}
+                        <button type="submit" class="btn-save">Update Data Lake</button>
+                    </form>
+                    <p style="text-align:center"><a href="/view/{table_name}" style="color:#777">Cancel and Go Back</a></p>
+                </div>
+            </body>
+        </html>
+        """
+    except Exception as e:
+        return f"<h1>Error loading edit page</h1><p>{str(e)}</p>"
+
+async def get_cast_val(col_type: str, val: str):
+    """Helper to cast string form values to Trino types."""
+    col_type = col_type.lower()
+    if "int" in col_type:
+        return int(val) if val else 0
+    elif "double" in col_type or "decimal" in col_type or "real" in col_type:
+        return float(val) if val else 0.0
+    return str(val)
+
+@app.post("/update/{table_name}/{record_id}")
+async def update_record(table_name: str, record_id: str, request: Request):
+    """Handles manual record update in Trino with automatic type casting."""
+    try:
+        form_data = await request.form()
+        conn = get_trino_conn()
+        cur = conn.cursor()
+        
+        cur.execute(f"DESCRIBE {table_name}")
+        schema_info = {row[0]: row[1] for row in cur.fetchall()}
+        id_col = list(schema_info.keys())[0]
+        
+        update_parts = []
+        vals = []
+        
+        for col, val in form_data.items():
+            if col == id_col: continue # Don't update the ID
+            update_parts.append(f"{col} = ?")
+            vals.append(await get_cast_val(schema_info[col], val))
+
+        # Add the ID for the WHERE clause
+        vals.append(await get_cast_val(schema_info[id_col], record_id))
+        
+        query = f"UPDATE {table_name} SET {', '.join(update_parts)} WHERE {id_col} = ?"
+        cur.execute(query, vals)
+        
+        return RedirectResponse(url=f"/view/{table_name}", status_code=303)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
+
 @app.post("/insert/{table_name}")
 async def insert_record(table_name: str, request: Request):
     """Handles manual record insertion into Trino with automatic type casting."""
@@ -244,14 +347,7 @@ async def insert_record(table_name: str, request: Request):
             cols.append(col)
             
             # 2. Cast string values from form to the correct Trino type
-            col_type = schema_info[col].lower()
-            if "int" in col_type:
-                vals.append(int(val) if val else 0)
-            elif "double" in col_type or "decimal" in col_type or "real" in col_type:
-                vals.append(float(val) if val else 0.0)
-            else:
-                vals.append(str(val))
-            
+            vals.append(await get_cast_val(schema_info[col], val))
             params.append("?")
 
         cols_str = ", ".join(cols)
