@@ -136,53 +136,81 @@ async def upload_and_ingest(table_name: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/view/{table_name}", response_class=HTMLResponse)
-async def dashboard_view(table_name: str, search: Optional[str] = None):
-    """The Main Admin Dashboard UI."""
+async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot: Optional[str] = None):
+    """The Main Admin Dashboard UI with Time Travel support."""
     try:
         conn = get_trino_conn()
         cur = conn.cursor()
         
-        # 1. Fetch Data (with search if provided)
-        query = f"SELECT * FROM {table_name}"
+        # 1. Construct Query (Standard or Time Travel)
+        base_query = f"SELECT * FROM {table_name}"
+        if snapshot:
+             # Iceberg Time Travel Syntax: FOR VERSION AS OF <id>
+             base_query += f" FOR VERSION AS OF {snapshot}"
+             
+        query = base_query
+        
+        # 2. Add Search Filter
         if search:
-            # Basic search across all columns (conceptually)
-            # For PoC, we search the first few common names or just filter by ID if it's a number
             if search.isdigit():
                 query += f" WHERE id = {search}"
             else:
-                # Try to find a 'name' or 'user_id' or 'category' column to search
                 cur.execute(f"DESCRIBE {table_name}")
                 cols = [row[0] for row in cur.fetchall()]
                 search_targets = [c for c in cols if c in ['name', 'user_id', 'category', 'status', 'department']]
                 if search_targets:
                     filters = " OR ".join([f"CAST({c} AS VARCHAR) LIKE '%{search}%'" for c in search_targets])
-                    query += f" WHERE {filters}"
+                    query += f" WHERE ({filters})" if "WHERE" not in query else f" AND ({filters})"
         
         query += " LIMIT 50"
         cur.execute(query)
         columns = [desc[0] for desc in cur.description]
         rows = cur.fetchall()
 
-        # 2. Fetch Snapshots
-        cur.execute(f'SELECT snapshot_id, committed_at, operation FROM "{table_name}$snapshots" ORDER BY committed_at DESC LIMIT 5')
-        snapshots = cur.fetchall()
+        # 3. Fetch Snapshot history for the sidebar
+        cur.execute(f'SELECT snapshot_id, committed_at, operation FROM "{table_name}$snapshots" ORDER BY committed_at DESC LIMIT 8')
+        snapshots_data = cur.fetchall()
 
-        # UI Components
-        snapshot_list = "".join([f'<li><b>{s[2]}</b> at {s[1]} <br><small>{s[0]}</small></li>' for s in snapshots])
+        # 4. Build UI components
+        snapshot_list = ""
+        for s in snapshots_data:
+            is_active = "border-left: 4px solid #f39c12; background: #fff8eb;" if str(s[0]) == snapshot else ""
+            search_param = f"&search={search}" if search else ""
+            snapshot_list += f"""
+                <li style='margin-bottom:10px; padding:10px; border-radius:4px; border:1px solid #eee; {is_active}'>
+                    <a href='/view/{table_name}?snapshot={s[0]}{search_param}' style='text-decoration:none; color:inherit'>
+                        <span class="badge" style="background:#555">{s[2]}</span><br>
+                        <small style="color:#666">{s[1]}</small><br>
+                        <small style="font-size:0.75em; color:#999">{s[0]}</small>
+                    </a>
+                </li>
+            """
         
+        time_travel_banner = ""
+        if snapshot:
+            time_travel_banner = f"""
+            <div style="background: #fff3cd; color: #856404; padding: 15px; border-radius: 8px; border: 1px solid #ffeeba; margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center">
+                <span>⚠️ <b>TIME TRAVEL ACTIVE:</b> Viewing data from snapshot <code>{snapshot}</code></span>
+                <a href="/view/{table_name}{'?search='+search if search else ''}" style="background:#856404; color:white; padding:5px 12px; border-radius:4px; text-decoration:none; font-size:0.9em">Return to Latest</a>
+            </div>
+            """
+
         table_headers = "".join([f"<th>{c}</th>" for c in columns])
         table_rows = ""
         for r in rows:
             row_cells = "".join([f"<td>{v}</td>" for v in r])
-            # Add Edit and Delete buttons for each row (using first column as ID)
-            actions = f"""
-                <td style="display:flex; gap:5px">
-                    <a href="/edit/{table_name}/{r[0]}" class="btn-edit" style="text-decoration:none">Edit</a>
-                    <form action="/delete/{table_name}/{r[0]}" method="POST" style="margin:0">
-                        <button class="btn-delete">Delete</button>
-                    </form>
-                </td>
-            """
+            actions = ""
+            if not snapshot: # Only allow edits on the 'latest' view
+                actions = f"""
+                    <td style="display:flex; gap:5px">
+                        <a href="/edit/{table_name}/{r[0]}" class="btn-edit" style="text-decoration:none">Edit</a>
+                        <form action="/delete/{table_name}/{r[0]}" method="POST" style="margin:0">
+                            <button class="btn-delete">Delete</button>
+                        </form>
+                    </td>
+                """
+            else:
+                actions = "<td><small style='color:#999'>Read Only</small></td>"
             table_rows += f"<tr>{row_cells}{actions}</tr>"
 
         return f"""
@@ -202,8 +230,6 @@ async def dashboard_view(table_name: str, search: Optional[str] = None):
                     .btn-delete {{ background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; }}
                     .search-box {{ padding: 10px; width: 300px; border: 1px solid #ddd; border-radius: 6px; }}
                     .snapshot-card ul {{ padding: 0; list-style: none; font-size: 0.9em; }}
-                    .snapshot-card li {{ padding: 10px 0; border-bottom: 1px solid #f0f0f0; }}
-                    .snapshot-card li:last-child {{ border: 0; }}
                     .badge {{ background: #3498db; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.7em; vertical-align: middle; }}
                 </style>
             </head>
@@ -214,16 +240,19 @@ async def dashboard_view(table_name: str, search: Optional[str] = None):
                         <h1 style="margin:5px 0">{table_name} <span class="badge">ICEBERG</span></h1>
                     </div>
                     <form action="/view/{table_name}" method="GET">
-                        <input type="text" name="search" class="search-box" placeholder="Search by ID or Name..." value="{search or ''}">
+                        <input type="hidden" name="snapshot" value="{snapshot or ''}">
+                        <input type="text" name="search" class="search-box" placeholder="Search across columns..." value="{search or ''}">
                         <button type="submit" style="padding:10px">Search</button>
                     </form>
                 </div>
 
+                {time_travel_banner}
+
                 <div class="grid">
                     <div class="card">
                         <div style="display:flex; justify-content:space-between">
-                            <h3>Table Records</h3>
-                            <button class="btn-add" onclick="document.getElementById('add-form').style.display='block'">+ Insert Record</button>
+                            <h3>{'Historical View' if snapshot else 'Latest Records'}</h3>
+                            {'<button class="btn-add" onclick="document.getElementById(\'add-form\').style.display=\'block\'">+ Insert Record</button>' if not snapshot else ''}
                         </div>
                         
                         <div id="add-form" style="display:none; background:#f9f9f9; padding:20px; margin:20px 0; border-radius:8px; border:1px solid #eee">
@@ -242,11 +271,11 @@ async def dashboard_view(table_name: str, search: Optional[str] = None):
                     </div>
 
                     <div class="card snapshot-card">
-                        <h3>Snapshot History</h3>
-                        <p style="font-size:0.8em; color:#666">Iceberg Time-Travel Log</p>
+                        <h3>Time Travel</h3>
+                        <p style="font-size:0.8em; color:#666">Click a snapshot to travel back in time.</p>
                         <ul>{snapshot_list}</ul>
                         <hr>
-                        <p><small>Every change creates a new snapshot automatically.</small></p>
+                        <p><small>Iceberg keeps an immutable record of every change.</small></p>
                     </div>
                 </div>
             </body>
