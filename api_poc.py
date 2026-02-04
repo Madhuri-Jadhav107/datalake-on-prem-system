@@ -61,15 +61,39 @@ async def home_portal():
                 <div class="container">
                     <h2>Managed Iceberg Tables</h2>
                     <ul>{table_links}</ul>
+                    
                     <hr style="margin: 40px 0; border: 0; border-top: 1px solid #eee;">
-                    <h3>Quick Actions</h3>
-                    <p>To ingest new data, use the <code>/upload</code> endpoint or the CLI helper.</p>
+                    
+                    <h3>🚀 Ingest New Data</h3>
+                    <p>Upload a CSV file to automatically create/update a table in the Data Lake.</p>
+                    <div style="background: #f8f9fa; padding: 25px; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <form action="/upload-ui" method="POST" enctype="multipart/form-data">
+                            <div style="margin-bottom: 15px;">
+                                <label style="display:block; margin-bottom: 5px; font-weight: 600;">Target Table Name:</label>
+                                <input type="text" name="table_name" placeholder="e.g. sales_data" style="padding: 10px; width: 100%; border: 1px solid #ddd; border-radius: 4px;" required>
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display:block; margin-bottom: 5px; font-weight: 600;">Select CSV File:</label>
+                                <input type="file" name="file" accept=".csv" style="padding: 10px; width: 100%; border: 1px solid #ddd; border-radius: 4px; background: white;" required>
+                            </div>
+                            <button type="submit" class="btn-table" style="width: 100%; background: #1a73e8; color: white; border: none; cursor: pointer;">Start Automated Ingestion</button>
+                        </form>
+                    </div>
                 </div>
             </body>
         </html>
         """
     except Exception as e:
         return f"<h1>Error reaching Trino</h1><p>{str(e)}</p>"
+
+@app.post("/upload-ui")
+async def upload_ui(table_name: str = Form(...), file: UploadFile = File(...)):
+    """Handles file upload from the Web UI and redirects to home."""
+    try:
+        await upload_and_ingest(table_name, file)
+        return RedirectResponse(url="/?msg=Ingestion+Started", status_code=303)
+    except Exception as e:
+        return f"<h1>Upload Failed</h1><p>{str(e)}</p><a href='/'>Go Back</a>"
 
 @app.get("/tables")
 async def api_list_tables():
