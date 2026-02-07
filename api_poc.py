@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 from elasticsearch import Elasticsearch
 
 app = FastAPI(title="Ozone Data Lake Admin Portal")
@@ -401,11 +402,26 @@ async def edit_record_page(table_name: str, record_id: str):
 
 async def get_cast_val(col_type: str, val: str):
     """Helper to cast string form values to Trino types."""
+    if val is None or val == "":
+        return None
+        
     col_type = col_type.lower()
-    if "int" in col_type:
-        return int(val) if val else 0
-    elif "double" in col_type or "decimal" in col_type or "real" in col_type:
-        return float(val) if val else 0.0
+    try:
+        if "int" in col_type:
+            return int(val)
+        elif "double" in col_type or "decimal" in col_type or "real" in col_type:
+            return float(val)
+        elif "boolean" in col_type:
+            return val.lower() in ("true", "1", "yes", "on")
+        elif "timestamp" in col_type or "date" in col_type:
+            # Try parsing common ISO formats
+            try:
+                return datetime.fromisoformat(val.replace("Z", "+00:00"))
+            except:
+                # Fallback to string if parsing fails, but most modern inputs are ISO
+                return val
+    except:
+        pass
     return str(val)
 
 @app.post("/update/{table_name}/{record_id}")
