@@ -10,10 +10,13 @@ table_name = sys.argv[1]
 # Initialize Spark Session with Iceberg and ES configs
 spark = SparkSession.builder \
     .appName(f"Sync-to-ES-{table_name}") \
+    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+    .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
     .config("spark.hadoop.fs.s3a.access.key", "anyID") \
     .config("spark.hadoop.fs.s3a.secret.key", "anySecret") \
     .config("spark.hadoop.fs.s3a.endpoint", "http://s3g:9878") \
     .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+    .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
     .config("spark.sql.catalog.iceberg", "org.apache.iceberg.spark.SparkCatalog") \
     .config("spark.sql.catalog.iceberg.type", "hive") \
     .config("spark.sql.catalog.iceberg.uri", "thrift://hive-metastore:9083") \
