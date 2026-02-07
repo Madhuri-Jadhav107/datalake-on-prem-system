@@ -340,21 +340,41 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
         # 2.5 Identify Changed IDs for Snapshot View
         changed_rows = {} # {id_val: (change_type, row_data)}
         if snapshot:
+            print(f"DEBUG: Analyzing Snapshot {snapshot} for table {table_name}")
             try:
-                # Query changelog for this specific snapshot
-                changelog_query = f'SELECT * FROM "{CATALOG}"."{SCHEMA}"."{table_name}$changelog" WHERE "snapshot_id" = {snapshot}'
+                # 1. First, check what metadata tables are actually available
+                cur.execute(f"SHOW TABLES FROM {CATALOG}.{SCHEMA} LIKE '{table_name}$%'")
+                meta_tables = [r[0] for r in cur.fetchall()]
+                print(f"DEBUG: Available Metadata Tables: {meta_tables}")
+                
+                # 2. Query changelog if available
+                changelog_table = f'"{CATALOG}"."{SCHEMA}"."{table_name}$changelog"'
+                changelog_query = f"SELECT * FROM {changelog_table} WHERE snapshot_id = {snapshot}"
+                
+                # Check column names first
+                cur.execute(f"DESCRIBE {changelog_table}")
+                cl_cols_info = cur.fetchall()
+                cl_cols = [r[0].lower() for r in cl_cols_info] # Lowercase for safety
+                print(f"DEBUG: Changelog Columns: {cl_cols}")
+                
                 safe_execute(cur, changelog_query)
                 changelog_data = cur.fetchall()
-                cl_cols = [desc[0] for desc in cur.description]
+                print(f"DEBUG: Found {len(changelog_data)} changes in snapshot {snapshot}")
                 
                 for cl_row in changelog_data:
                     row_dict = dict(zip(cl_cols, cl_row))
-                    op = row_dict.get('operation')
-                    rid = row_dict.get(id_col)
-                    if rid is not None:
-                        changed_rows[str(rid)] = op
+                    # Trino changelog often uses 'change_type' or 'operation'
+                    op = row_dict.get('operation') or row_dict.get('_change_type') or row_dict.get('change_type')
+                    
+                    # Try to find the ID column value
+                    # We use the id_col name we discovered earlier
+                    rid = row_dict.get(id_col.lower())
+                    
+                    if rid is not None and op:
+                        changed_rows[str(rid)] = str(op).upper()
+                        print(f"DEBUG: Record {rid} was {op}")
             except Exception as e:
-                print(f"Changelog Query Failed: {e}")
+                print(f"❌ Changelog Diagnostic Failed: {e}")
 
         query += " LIMIT 50"
         
@@ -369,7 +389,7 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
         rows = cur.fetchall()
 
         # 3. Fetch Snapshot history for the sidebar (quoted metadata table)
-        snapshot_query = f'SELECT "snapshot_id", "committed_at", "operation" FROM "{CATALOG}"."{SCHEMA}"."{table_name}$snapshots" ORDER BY "committed_at" DESC LIMIT 8'
+        snapshot_query = f'SELECT "snapshot_id", "committed_at", "operation" FROM "{CATALOG}"."{SCHEMA}"."{table_name}$snapshots" ORDER BY "committed_at" DESC LIMIT 15'
         safe_execute(cur, snapshot_query)
         snapshots_data = cur.fetchall()
 
@@ -382,14 +402,17 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
 
         snapshot_list = ""
         for s in snapshots_data:
-            is_active = "border-left: 4px solid #f39c12; background: #fff8eb;" if str(s[0]) == str(snapshot) else ""
+            # Important: Ensure string comparison for snapshot ID
+            is_active = "border-left: 6px solid #f39c12; background: #fff8eb; font-weight: bold;" if str(s[0]) == str(snapshot) else ""
             search_param = f"&search={search}" if search else ""
             snapshot_list += f"""
-                <li style='margin-bottom:10px; padding:10px; border-radius:4px; border:1px solid #eee; {is_active}'>
-                    <a href='/view/{table_name}?snapshot={s[0]}{search_param}' style='text-decoration:none; color:inherit'>
-                        <span class="badge" style="background:#555">{s[2]}</span><br>
-                        <small style="color:#666">{s[1]}</small><br>
-                        <small style="font-size:0.75em; color:#999">{s[0]}</small>
+                <li style='margin-bottom:12px; padding:12px; border-radius:8px; border:1px solid #e2e8f0; {is_active}; transition: 0.2s;'>
+                    <a href='/view/{table_name}?snapshot={s[0]}{search_param}' style='text-decoration:none; color:inherit; display:block;'>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px">
+                            <span class="badge" style="background:#475569">{s[2]}</span>
+                            <small style="color:#64748b; font-size:0.75rem">{str(s[1])[:19]}</small>
+                        </div>
+                        <small style="font-family:monospace; color:#94a3b8">ID: {str(s[0])[:12]}...</small>
                     </a>
                 </li>
             """
