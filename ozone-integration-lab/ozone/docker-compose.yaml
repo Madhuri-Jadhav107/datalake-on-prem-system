@@ -279,6 +279,21 @@ services:
     networks:
       - ozone-net
 
+  source-db:
+    image: postgres:15-alpine
+    hostname: source-db
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=inventory
+    ports:
+      - "15431:5432"
+    command: ["postgres", "-c", "wal_level=logical"]
+    volumes:
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ozone-net
+
   mysql-source:
     image: mysql:8.0
     hostname: mysql-source
