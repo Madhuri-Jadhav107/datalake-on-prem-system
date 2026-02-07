@@ -1,5 +1,6 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col
+from pyspark.sql.functions import from_json, col, row_number, desc
+from pyspark.sql.window import Window
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
 # --- Configuration ---
@@ -57,8 +58,14 @@ def process_batch(batch_df, batch_id):
 
     print(f"Processing batch {batch_id} with {batch_df.count()} events...")
     
-    # Register batch as temp view in the batch-specific session
-    batch_df.createOrReplaceTempView("updates")
+    # Deduplicate: Only keep the latest event for each record ID within this batch
+    window_spec = Window.partitionBy("id").orderBy(desc("timestamp"))
+    deduped_df = batch_df.withColumn("rn", row_number().over(window_spec)) \
+        .filter(col("rn") == 1) \
+        .drop("rn", "timestamp")
+    
+    # Register deduplicated batch as temp view
+    deduped_df.createOrReplaceTempView("updates")
     
     # Perform MERGE INTO using the batch-specific session
     # We use 'spark_catalog.default.updates' to ensure we don't look into the Iceberg catalog for the temp view
@@ -93,17 +100,20 @@ if __name__ == "__main__":
         .load()
 
     # Parse JSON and handle Debezium 'before'/'after' for ID
-    parsed_df = raw_df.selectExpr("CAST(value AS STRING)") \
-        .select(from_json(col("value"), schema).alias("data")) \
-        .select(
+    # We include 'timestamp' from Kafka to deduplicate in case of multiple updates in one batch
+    parsed_df = raw_df.select(
+            col("timestamp"),
+            from_json(col("value").cast("string"), schema).alias("data")
+        ).select(
+            col("timestamp"),
             col("data.payload.before.id").alias("before_id"),
             col("data.payload.after.id").alias("after_id"),
             col("data.payload.after.name").alias("name"),
             col("data.payload.after.email").alias("email"),
             col("data.payload.after.city").alias("city"),
             col("data.payload.op").alias("op")
-        ) \
-        .selectExpr(
+        ).selectExpr(
+            "timestamp",
             "coalesce(after_id, before_id) as id",
             "name", "email", "city", "op"
         )
