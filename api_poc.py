@@ -334,7 +334,7 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                     query += f' WHERE "{id_col}" = {search}'
                 else:
                     if search_targets:
-                        filters = " OR ".join([f'CAST("{c}" AS VARCHAR) LIKE %s' for c in search_targets])
+                        filters = " OR ".join([f'CAST("{c}" AS VARCHAR) LIKE ?' for c in search_targets])
                         # Use parameterized queries for literals to avoid syntax issues
                         search_val = f"%{search}%"
                         query += f" WHERE ({filters})"
