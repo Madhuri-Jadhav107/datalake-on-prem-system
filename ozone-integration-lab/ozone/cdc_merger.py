@@ -25,7 +25,6 @@ def create_spark_session():
         .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-        .config("spark.sql.defaultCatalog", CATALOG_NAME) \
         .getOrCreate()
 
 # Schema for Debezium JSON payload
@@ -61,7 +60,7 @@ def process_batch(batch_df, batch_id):
     # We use 'spark_catalog.default.updates' to ensure we don't look into the Iceberg catalog for the temp view
     batch_df.sparkSession.sql(f"""
         MERGE INTO {CATALOG_NAME}.{DB_NAME}.{TABLE_NAME} t
-        USING spark_catalog.default.updates s
+        USING updates s
         ON t.id = s.id
         WHEN MATCHED AND s.op = 'd' THEN DELETE
         WHEN MATCHED THEN UPDATE SET t.name = s.name, t.email = s.email, t.city = s.city
