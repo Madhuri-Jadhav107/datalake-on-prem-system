@@ -70,53 +70,90 @@ async def es_search(table_name: str, keyword: str):
 
 @app.get("/", response_class=HTMLResponse)
 async def home_portal():
-    """Portal Home Page with list of tables."""
+    """Portal Home Page with list of tables grouped by source."""
     try:
         conn = get_trino_conn()
         cur = conn.cursor()
         cur.execute("SHOW TABLES")
         tables = [row[0] for row in cur.fetchall()]
         
-        table_links = "".join([f'<li><a href="/view/{t}" class="btn-table">{t}</a></li>' for t in tables])
+        # Categorize tables
+        pg_tables = [t for t in tables if "cdc_customers" == t or ("cdc" in t and "mysql" not in t)]
+        mysql_tables = [t for t in tables if "mysql" in t]
+        other_tables = [t for t in tables if t not in pg_tables and t not in mysql_tables]
+        
+        def build_links(table_list, brand_class):
+            return "".join([f'<li><a href="/view/{t}" class="btn-table {brand_class}">{t}</a></li>' for t in table_list])
+        
+        pg_links = build_links(pg_tables, "pg-source")
+        mysql_links = build_links(mysql_tables, "mysql-source")
+        other_links = build_links(other_tables, "other-source")
         
         return f"""
         <html>
             <head>
-                <title>Ozone Data Lake Portal</title>
+                <title>Ozone Data Lake Admin Portal</title>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Outfit:wght@700&display=swap" rel="stylesheet">
                 <style>
-                    body {{ font-family: 'Inter', system-ui, sans-serif; margin: 0; background: #f0f2f5; color: #1c1e21; }}
-                    .hero {{ background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 60px 20px; text-align: center; }}
-                    .container {{ max-width: 900px; margin: -40px auto 40px; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); }}
-                    h1 {{ margin: 0; font-size: 2.5em; }}
-                    ul {{ list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 30px; }}
-                    .btn-table {{ display: block; padding: 20px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; text-decoration: none; color: #1a73e8; font-weight: 600; text-align: center; transition: 0.2s; }}
-                    .btn-table:hover {{ background: #e8f0fe; border-color: #1a73e8; transform: translateY(-3px); }}
+                    body {{ font-family: 'Inter', sans-serif; margin: 0; background: #f8fafc; color: #0f172a; line-height: 1.5; }}
+                    .hero {{ background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; padding: 80px 20px; text-align: center; border-bottom: 4px solid #3b82f6; }}
+                    .hero h1 {{ font-family: 'Outfit', sans-serif; font-size: 3.5rem; margin-bottom: 10px; letter-spacing: -1px; }}
+                    .container {{ max-width: 1000px; margin: -50px auto 60px; background: white; padding: 50px; border-radius: 20px; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1); }}
+                    h2, h3 {{ font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 10px; }}
+                    .source-section {{ margin-top: 40px; padding: 25px; border-radius: 16px; background: #f1f5f9; }}
+                    .pg-section {{ border-left: 8px solid #336791; }}
+                    .mysql-section {{ border-left: 8px solid #f29111; }}
+                    
+                    ul {{ list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; margin-top: 20px; }}
+                    .btn-table {{ display: block; padding: 22px; background: white; border: 2px solid transparent; border-radius: 12px; text-decoration: none; font-weight: 600; text-align: center; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }}
+                    .btn-table:hover {{ transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }}
+                    
+                    .pg-source {{ color: #336791; border-color: #33679122; }}
+                    .pg-source:hover {{ border-color: #336791; background: #3367910a; }}
+                    .mysql-source {{ color: #f29111; border-color: #f2911122; }}
+                    .mysql-source:hover {{ border-color: #f29111; background: #f291110a; }}
+                    .other-source {{ color: #64748b; }}
+                    
+                    .badge {{ font-size: 0.7em; padding: 4px 10px; border-radius: 100px; font-weight: bold; text-transform: uppercase; }}
+                    .bg-pg {{ background: #336791; color: white; }}
+                    .bg-mysql {{ background: #f29111; color: white; }}
                 </style>
             </head>
             <body>
                 <div class="hero">
-                    <h1>Ozone Data Lake Admin Portal</h1>
-                    <p>Powered by Apache Iceberg & Trino</p>
+                    <h1>Ozone Data Lake Admin</h1>
+                    <p style="opacity: 0.8; font-size: 1.2rem;">Multi-Source CDC Dashboard • Hive Metastore • Apache Iceberg</p>
                 </div>
                 <div class="container">
-                    <h2>Managed Iceberg Tables</h2>
-                    <ul>{table_links}</ul>
+                    <div class="source-section pg-section">
+                        <h2>🐘 PostgreSQL Sources <span class="badge bg-pg">Master</span></h2>
+                        <ul>{pg_links if pg_links else '<li><small>No Postgres tables detected</small></li>'}</ul>
+                    </div>
+
+                    <div class="source-section mysql-section">
+                        <h2>🐬 MySQL Sources <span class="badge bg-mysql">Active</span></h2>
+                        <ul>{mysql_links if mysql_links else '<li><small>No MySQL tables detected</small></li>'}</ul>
+                    </div>
+
+                    {f'''<div class="source-section"><h3>📁 Other Tables</h3><ul>{other_links}</ul></div>''' if other_tables else ''}
                     
-                    <hr style="margin: 40px 0; border: 0; border-top: 1px solid #eee;">
+                    <hr style="margin: 50px 0; border: 0; border-top: 1px solid #e2e8f0;">
                     
-                    <h3>🚀 Ingest New Data</h3>
-                    <p>Upload a CSV file to automatically create/update a table in the Data Lake.</p>
-                    <div style="background: #f8f9fa; padding: 25px; border-radius: 8px; border: 1px solid #dee2e6;">
-                        <form action="/upload-ui" method="POST" enctype="multipart/form-data">
-                            <div style="margin-bottom: 15px;">
-                                <label style="display:block; margin-bottom: 5px; font-weight: 600;">Target Table Name:</label>
-                                <input type="text" name="table_name" placeholder="e.g. sales_data" style="padding: 10px; width: 100%; border: 1px solid #ddd; border-radius: 4px;" required>
+                    <div style="background: #0f172a; color: white; padding: 40px; border-radius: 20px;">
+                        <h3 style="color: #3b82f6;">🚀 Ingest New CSV Data</h3>
+                        <p style="opacity: 0.7;">Add local datasets directly to the Data Lake by uploading a CSV.</p>
+                        <form action="/upload-ui" method="POST" enctype="multipart/form-data" style="margin-top: 25px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                                <div>
+                                    <label style="display:block; margin-bottom: 8px; font-weight: 600;">Target Table Name:</label>
+                                    <input type="text" name="table_name" placeholder="e.g. ad_analytics" style="padding: 12px; width: 100%; border: 1px solid #334155; border-radius: 8px; background: #1e293b; color: white;" required>
+                                </div>
+                                <div>
+                                    <label style="display:block; margin-bottom: 8px; font-weight: 600;">CSV File Selection:</label>
+                                    <input type="file" name="file" accept=".csv" style="padding: 9px; width: 100%; border: 1px solid #334155; border-radius: 8px; background: #1e293b; color: white;" required>
+                                </div>
                             </div>
-                            <div style="margin-bottom: 15px;">
-                                <label style="display:block; margin-bottom: 5px; font-weight: 600;">Select CSV File:</label>
-                                <input type="file" name="file" accept=".csv" style="padding: 10px; width: 100%; border: 1px solid #ddd; border-radius: 4px; background: white;" required>
-                            </div>
-                            <button type="submit" class="btn-table" style="width: 100%; background: #1a73e8; color: white; border: none; cursor: pointer;">Start Automated Ingestion</button>
+                            <button type="submit" style="width: 100%; padding: 15px; background: #3b82f6; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s;">Run Distributed Ingest</button>
                         </form>
                     </div>
                 </div>
@@ -232,6 +269,12 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
         snapshots_data = cur.fetchall()
 
         # 4. Build UI components
+        source_badge = ""
+        if "mysql" in table_name:
+            source_badge = '<span class="badge" style="background:#f29111; margin-left:10px">MySQL Source</span>'
+        elif "cdc" in table_name:
+            source_badge = '<span class="badge" style="background:#336791; margin-left:10px">Postgres Source</span>'
+
         snapshot_list = ""
         for s in snapshots_data:
             is_active = "border-left: 4px solid #f39c12; background: #fff8eb;" if str(s[0]) == snapshot else ""
@@ -297,7 +340,7 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                 <div class="header">
                     <div>
                         <a href="/" style="text-decoration:none; color:#777">← Back to Portal</a>
-                        <h1 style="margin:5px 0">{table_name} <span class="badge">ICEBERG</span></h1>
+                        <h1 style="margin:5px 0">{table_name} {source_badge} <span class="badge" style="background:#555">ICEBERG</span></h1>
                     </div>
                     <form action="/view/{table_name}" method="GET">
                         <input type="hidden" name="snapshot" value="{snapshot or ''}">
