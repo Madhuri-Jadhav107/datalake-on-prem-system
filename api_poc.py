@@ -192,11 +192,16 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
         # 2. Handle Search (Enterprise ES Search vs. Trino Fallback)
         using_es = False
         if search:
-            # First, dynamically identify an ID column (default to first column)
+            # First, dynamically identify an ID column and Searchable columns
             cur.execute(f"DESCRIBE {table_name}")
             cols_info = cur.fetchall()
             all_cols = [row[0] for row in cols_info]
             id_col = all_cols[0] if all_cols else "id"
+            
+            # Identify VARCHAR/STRING columns for standard search fallback
+            string_cols = [row[0] for row in cols_info if 'varchar' in str(row[1]).lower() or 'string' in str(row[1]).lower()]
+            # If no string columns found (unlikely), fallback to all columns
+            search_targets = string_cols if string_cols else all_cols
             
             # TRY ELASTICSEARCH FIRST (for 1.6B record scale)
             ids = await es_search(table_name, search)
@@ -212,7 +217,6 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                     # Use the dynamically detected id_col instead of hardcoded 'id'
                     query += f" WHERE {id_col} = {search}"
                 else:
-                    search_targets = [c for c in all_cols if c in ['name', 'user_id', 'category', 'status', 'department', 'id', 'transaction_id']]
                     if search_targets:
                         filters = " OR ".join([f"CAST({c} AS VARCHAR) LIKE '%{search}%'" for c in search_targets])
                         query += f" WHERE ({filters})" if "WHERE" not in query else f" AND ({filters})"
