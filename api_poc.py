@@ -306,42 +306,29 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
              
         query = base_query
         
-        # 2. Handle Search (Enterprise ES Search vs. Trino Fallback)
-        using_es = False
-        if search:
-            # First, dynamically identify an ID column and Searchable columns
-            cur.execute(f"DESCRIBE {full_table_path}")
-            cols_info = cur.fetchall()
-            all_cols = [row[0] for row in cols_info]
-            id_col = all_cols[0] if all_cols else "id"
-            
-            # Identify VARCHAR/STRING columns for standard search fallback
-            string_cols = [row[0] for row in cols_info if 'varchar' in str(row[1]).lower() or 'string' in str(row[1]).lower()]
-            # If no string columns found (unlikely), fallback to all columns
-            search_targets = string_cols if string_cols else all_cols
-            
-            # TRY ELASTICSEARCH FIRST (for 1.6B record scale)
-            ids = await es_search(table_name, search)
-            
-            if ids is not None and len(ids) > 0:
-                # Use ES results to filter Trino
-                id_list = ",".join([f"'{i}'" if not str(i).isdigit() else str(i) for i in ids])
-                query += f' WHERE "{id_col}" IN ({id_list})'
-                using_es = True
-            else:
-                # FALLBACK to standard Trino search
-                if search.isdigit():
-                    query += f' WHERE "{id_col}" = {search}'
-                else:
-                    if search_targets:
-                        filters = " OR ".join([f'CAST("{c}" AS VARCHAR) LIKE ?' for c in search_targets])
-                        # Use parameterized queries for literals to avoid syntax issues
-                        search_val = f"%{search}%"
-                        query += f" WHERE ({filters})"
-                        # We'll need to pass params to safe_execute later
-        
-        query += " LIMIT 50"
-        
+        # 2.5 Identify Changed IDs for Snapshot View
+        changed_rows = {} # {id_val: (change_type, row_data)}
+        if snapshot:
+            try:
+                # Query changelog for this specific snapshot
+                # Standard changelog columns are: operation, snapshot_id, [data_columns...]
+                changelog_query = f'SELECT * FROM "{CATALOG}"."{SCHEMA}"."{table_name}$changelog" WHERE "snapshot_id" = {snapshot}'
+                safe_execute(cur, changelog_query)
+                changelog_data = cur.fetchall()
+                cl_cols = [desc[0] for desc in cur.description]
+                
+                # Operation is usually the first or second column
+                # Map changed records to their operation
+                for cl_row in changelog_data:
+                    row_dict = dict(zip(cl_cols, cl_row))
+                    op = row_dict.get('operation')
+                    # Find a candidate ID
+                    rid = row_dict.get(id_col)
+                    if rid is not None:
+                        changed_rows[str(rid)] = op
+            except Exception as e:
+                print(f"Changelog Query Failed: {e}")
+
         # Execute main data query
         if search and not search.isdigit() and not using_es and search_targets:
             params = [f"%{search}%"] * len(search_targets)
@@ -388,8 +375,25 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
             """
 
         table_headers = "".join([f"<th>{c}</th>" for c in columns])
+        if snapshot: table_headers += "<th>Status</th>" # Add status col only in snapshot view
+        
         table_rows = ""
         for r in rows:
+            row_id = str(r[0])
+            row_style = ""
+            status_cell = ""
+            
+            if snapshot and row_id in changed_rows:
+                op = changed_rows[row_id]
+                if op == 'INSERT':
+                    row_style = "background-color: #dcfce7; color: #166534;" # Green highlight
+                    status_cell = '<td><span class="badge bg-success">Added/Modified</span></td>'
+                elif op == 'DELETE':
+                    row_style = "background-color: #fee2e2; color: #991b1b; text-decoration: line-through;" # Red highlight
+                    status_cell = '<td><span class="badge bg-danger">Deleted</span></td>'
+            elif snapshot:
+                status_cell = '<td><small style="color:#999">-</small></td>'
+
             row_cells = "".join([f"<td>{v}</td>" for v in r])
             actions = ""
             if not snapshot: # Only allow edits on the 'latest' view
@@ -403,7 +407,8 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                 """
             else:
                 actions = "<td><small style='color:#999'>Read Only</small></td>"
-            table_rows += f"<tr>{row_cells}{actions}</tr>"
+            
+            table_rows += f"<tr style='{row_style}'>{row_cells}{status_cell}{actions}</tr>"
 
         return f"""
         <html>
@@ -423,6 +428,8 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                     .search-box {{ padding: 10px; width: 300px; border: 1px solid #ddd; border-radius: 6px; }}
                     .snapshot-card ul {{ padding: 0; list-style: none; font-size: 0.9em; }}
                     .badge {{ background: #3498db; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.7em; vertical-align: middle; }}
+                    .bg-success {{ background: #22c55e; }}
+                    .bg-danger {{ background: #ef4444; }}
                 </style>
             </head>
             <body>
