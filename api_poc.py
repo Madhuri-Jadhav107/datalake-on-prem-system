@@ -306,29 +306,58 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
              
         query = base_query
         
+        # 1.5 Discovery: Identify ID column and Searchable columns early
+        # This ensures id_col is available for both Search and Snapshot Diffing
+        cur.execute(f"DESCRIBE {full_table_path}")
+        cols_info = cur.fetchall()
+        all_cols = [row[0] for row in cols_info]
+        id_col = all_cols[0] if all_cols else "id"
+        
+        # Identify VARCHAR/STRING columns for standard search fallback
+        string_cols = [row[0] for row in cols_info if 'varchar' in str(row[1]).lower() or 'string' in str(row[1]).lower()]
+        search_targets = string_cols if string_cols else all_cols
+        
+        # 2. Handle Search (Enterprise ES Search vs. Trino Fallback)
+        using_es = False
+        if search:
+            # TRY ELASTICSEARCH FIRST (for 1.6B record scale)
+            ids = await es_search(table_name, search)
+            
+            if ids is not None and len(ids) > 0:
+                # Use ES results to filter Trino
+                id_list = ",".join([f"'{i}'" if not str(i).isdigit() else str(i) for i in ids])
+                query += f' WHERE "{id_col}" IN ({id_list})'
+                using_es = True
+            else:
+                # FALLBACK to standard Trino search
+                if search.isdigit():
+                    query += f' WHERE "{id_col}" = {search}'
+                else:
+                    if search_targets:
+                        filters = " OR ".join([f'CAST("{c}" AS VARCHAR) LIKE ?' for c in search_targets])
+                        query += f" WHERE ({filters})"
+        
         # 2.5 Identify Changed IDs for Snapshot View
         changed_rows = {} # {id_val: (change_type, row_data)}
         if snapshot:
             try:
                 # Query changelog for this specific snapshot
-                # Standard changelog columns are: operation, snapshot_id, [data_columns...]
                 changelog_query = f'SELECT * FROM "{CATALOG}"."{SCHEMA}"."{table_name}$changelog" WHERE "snapshot_id" = {snapshot}'
                 safe_execute(cur, changelog_query)
                 changelog_data = cur.fetchall()
                 cl_cols = [desc[0] for desc in cur.description]
                 
-                # Operation is usually the first or second column
-                # Map changed records to their operation
                 for cl_row in changelog_data:
                     row_dict = dict(zip(cl_cols, cl_row))
                     op = row_dict.get('operation')
-                    # Find a candidate ID
                     rid = row_dict.get(id_col)
                     if rid is not None:
                         changed_rows[str(rid)] = op
             except Exception as e:
                 print(f"Changelog Query Failed: {e}")
 
+        query += " LIMIT 50"
+        
         # Execute main data query
         if search and not search.isdigit() and not using_es and search_targets:
             params = [f"%{search}%"] * len(search_targets)
