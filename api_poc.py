@@ -284,8 +284,22 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
         conn = get_trino_conn()
         cur = conn.cursor()
         
+        # Helper for safer execution with logging
+        def safe_execute(cursor, query_str, params=None):
+            try:
+                if params: cursor.execute(query_str, params)
+                else: cursor.execute(query_str)
+            except Exception as e:
+                print(f"\n❌ TRINO ERROR: {str(e)}")
+                print(f"FAILED QUERY: {query_str}")
+                if params: print(f"PARAMS: {params}")
+                raise
+        
         # 1. Construct Query (Standard or Time Travel)
-        base_query = f"SELECT * FROM {table_name}"
+        # Use full catalog.schema.table for absolute safety
+        full_table_path = f'"{CATALOG}"."{SCHEMA}"."{table_name}"'
+        base_query = f"SELECT * FROM {full_table_path}"
+        
         if snapshot:
              # Iceberg Time Travel Syntax: FOR VERSION AS OF <id>
              base_query += f" FOR VERSION AS OF {snapshot}"
@@ -296,7 +310,7 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
         using_es = False
         if search:
             # First, dynamically identify an ID column and Searchable columns
-            cur.execute(f"DESCRIBE {table_name}")
+            cur.execute(f"DESCRIBE {full_table_path}")
             cols_info = cur.fetchall()
             all_cols = [row[0] for row in cols_info]
             id_col = all_cols[0] if all_cols else "id"
@@ -312,37 +326,47 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
             if ids is not None and len(ids) > 0:
                 # Use ES results to filter Trino
                 id_list = ",".join([f"'{i}'" if not str(i).isdigit() else str(i) for i in ids])
-                query += f" WHERE {id_col} IN ({id_list})"
+                query += f' WHERE "{id_col}" IN ({id_list})'
                 using_es = True
             else:
                 # FALLBACK to standard Trino search
                 if search.isdigit():
-                    # Use the dynamically detected id_col instead of hardcoded 'id'
-                    query += f" WHERE {id_col} = {search}"
+                    query += f' WHERE "{id_col}" = {search}'
                 else:
                     if search_targets:
-                        filters = " OR ".join([f"CAST({c} AS VARCHAR) LIKE '%{search}%'" for c in search_targets])
-                        query += f" WHERE ({filters})" if "WHERE" not in query else f" AND ({filters})"
+                        filters = " OR ".join([f'CAST("{c}" AS VARCHAR) LIKE %s' for c in search_targets])
+                        # Use parameterized queries for literals to avoid syntax issues
+                        search_val = f"%{search}%"
+                        query += f" WHERE ({filters})"
+                        # We'll need to pass params to safe_execute later
         
         query += " LIMIT 50"
-        cur.execute(query)
+        
+        # Execute main data query
+        if search and not search.isdigit() and not using_es and search_targets:
+            params = [f"%{search}%"] * len(search_targets)
+            safe_execute(cur, query, params)
+        else:
+            safe_execute(cur, query)
+            
         columns = [desc[0] for desc in cur.description]
         rows = cur.fetchall()
 
-        # 3. Fetch Snapshot history for the sidebar
-        cur.execute(f'SELECT snapshot_id, committed_at, operation FROM "{table_name}$snapshots" ORDER BY committed_at DESC LIMIT 8')
+        # 3. Fetch Snapshot history for the sidebar (quoted metadata table)
+        snapshot_query = f'SELECT "snapshot_id", "committed_at", "operation" FROM "{CATALOG}"."{SCHEMA}"."{table_name}$snapshots" ORDER BY "committed_at" DESC LIMIT 8'
+        safe_execute(cur, snapshot_query)
         snapshots_data = cur.fetchall()
 
         # 4. Build UI components
         source_badge = ""
-        if "mysql" in table_name:
+        if "mysql" in table_name.lower():
             source_badge = '<span class="badge" style="background:#f29111; margin-left:10px">MySQL Source</span>'
-        elif "cdc" in table_name:
+        elif "cdc" in table_name.lower() or "customer" in table_name.lower():
             source_badge = '<span class="badge" style="background:#336791; margin-left:10px">Postgres Source</span>'
 
         snapshot_list = ""
         for s in snapshots_data:
-            is_active = "border-left: 4px solid #f39c12; background: #fff8eb;" if str(s[0]) == snapshot else ""
+            is_active = "border-left: 4px solid #f39c12; background: #fff8eb;" if str(s[0]) == str(snapshot) else ""
             search_param = f"&search={search}" if search else ""
             snapshot_list += f"""
                 <li style='margin-bottom:10px; padding:10px; border-radius:4px; border:1px solid #eee; {is_active}'>
