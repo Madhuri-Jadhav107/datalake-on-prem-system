@@ -16,7 +16,7 @@ def create_spark_session():
         .config(f"spark.sql.catalog.{CATALOG_NAME}", "org.apache.iceberg.spark.SparkCatalog") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.type", "hive") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.uri", "thrift://hive-metastore:9083") \
-        .config(f"spark.sql.catalog.{CATALOG_NAME}.warehouse", "s3a://madhuri-bucket/iceberg") \
+        .config(f"spark.sql.catalog.{CATALOG_NAME}.warehouse", "s3a://bucket1/iceberg") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.endpoint", "http://s3g:9878") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.access.key", "anyID") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.secret.key", "anySecret") \
@@ -25,6 +25,10 @@ def create_spark_session():
         .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
         .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+        .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog") \
+        .config("spark.sql.catalog.spark_catalog.type", "hive") \
+        .config("spark.sql.catalog.spark_catalog.uri", "thrift://hive-metastore:9083") \
+        .config("spark.sql.defaultCatalog", "spark_catalog") \
         .getOrCreate()
 
 # Schema for Debezium JSON payload
