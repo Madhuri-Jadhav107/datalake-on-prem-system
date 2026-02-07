@@ -186,9 +186,12 @@ async def sql_workspace(query: Optional[str] = None):
     error = None
     if query:
         try:
+            # SANITIZATION: Trino's Python driver often rejects trailing semicolons
+            sanitized_query = query.strip().rstrip(";")
+            
             conn = get_trino_conn()
             cur = conn.cursor()
-            cur.execute(query)
+            cur.execute(sanitized_query)
             if cur.description:
                 columns = [desc[0] for desc in cur.description]
                 results = cur.fetchall()
