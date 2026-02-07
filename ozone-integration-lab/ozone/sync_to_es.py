@@ -1,6 +1,5 @@
 import sys
 from pyspark.sql import SparkSession
-from elasticsearch import Elasticsearch
 
 if len(sys.argv) < 2:
     print("Usage: sync_to_es.py <table_name>")
