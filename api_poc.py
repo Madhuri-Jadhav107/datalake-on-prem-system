@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import Optional
+from elasticsearch import Elasticsearch
 
 app = FastAPI(title="Ozone Data Lake Admin Portal")
 
@@ -27,6 +28,44 @@ def get_trino_conn():
         catalog=CATALOG,
         schema=SCHEMA,
     )
+
+ES_HOST = os.getenv("ES_HOST", "http://localhost:19200")
+
+def get_es_client():
+    try:
+        return Elasticsearch([ES_HOST])
+    except:
+        return None
+
+async def es_search(table_name: str, keyword: str):
+    """Hits Elasticsearch for high-speed keyword search across all columns."""
+    try:
+        es = get_es_client()
+        if not es: return None
+        
+        # We index using lowercase table name
+        index_name = table_name.lower()
+        
+        res = es.search(index=index_name, body={
+            "query": {
+                "multi_match": {
+                    "query": keyword,
+                    "fields": ["*"], # Search across all indexed fields
+                    "fuzziness": "AUTO"
+                }
+            },
+            "size": 50
+        })
+        
+        # Extract IDs to filter Trino
+        hits = res['hits']['hits']
+        if not hits: return []
+        
+        # Assume 'id' column exists or use ES internal ID
+        return [hit['_source'].get('id') or hit['_id'] for hit in hits]
+    except Exception as e:
+        print(f"ES Search Error: {e}")
+        return None
 
 @app.get("/", response_class=HTMLResponse)
 async def home_portal():
@@ -137,7 +176,7 @@ async def upload_and_ingest(table_name: str, file: UploadFile = File(...)):
 
 @app.get("/view/{table_name}", response_class=HTMLResponse)
 async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot: Optional[str] = None):
-    """The Main Admin Dashboard UI with Time Travel support."""
+    """The Main Admin Dashboard UI with Time Travel & Enterprise Search support."""
     try:
         conn = get_trino_conn()
         cur = conn.cursor()
@@ -150,17 +189,30 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
              
         query = base_query
         
-        # 2. Add Search Filter
+        # 2. Handle Search (Enterprise ES Search vs. Trino Fallback)
+        using_es = False
         if search:
-            if search.isdigit():
-                query += f" WHERE id = {search}"
-            else:
+            # TRY ELASTICSEARCH FIRST (for 1.6B record scale)
+            ids = await es_search(table_name, search)
+            
+            if ids is not None and len(ids) > 0:
+                # Use ES results to filter Trino
+                id_list = ",".join([f"'{i}'" if not str(i).isdigit() else str(i) for i in ids])
                 cur.execute(f"DESCRIBE {table_name}")
-                cols = [row[0] for row in cur.fetchall()]
-                search_targets = [c for c in cols if c in ['name', 'user_id', 'category', 'status', 'department']]
-                if search_targets:
-                    filters = " OR ".join([f"CAST({c} AS VARCHAR) LIKE '%{search}%'" for c in search_targets])
-                    query += f" WHERE ({filters})" if "WHERE" not in query else f" AND ({filters})"
+                id_col = cur.fetchone()[0]
+                query += f" WHERE {id_col} IN ({id_list})"
+                using_es = True
+            else:
+                # FALLBACK to standard Trino search
+                if search.isdigit():
+                    query += f" WHERE id = {search}"
+                else:
+                    cur.execute(f"DESCRIBE {table_name}")
+                    cols = [row[0] for row in cur.fetchall()]
+                    search_targets = [c for c in cols if c in ['name', 'user_id', 'category', 'status', 'department']]
+                    if search_targets:
+                        filters = " OR ".join([f"CAST({c} AS VARCHAR) LIKE '%{search}%'" for c in search_targets])
+                        query += f" WHERE ({filters})" if "WHERE" not in query else f" AND ({filters})"
         
         query += " LIMIT 50"
         cur.execute(query)

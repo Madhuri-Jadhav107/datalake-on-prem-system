@@ -197,6 +197,35 @@ services:
     networks:
       - ozone-net
 
+  # -------------------------
+  # Elasticsearch (Search Layer)
+  # -------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
+    hostname: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "19200:9200"
+    networks:
+      - ozone-net
+
+  # -------------------------
+  # Kibana (Visualization)
+  # -------------------------
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.10
+    hostname: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "15601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - ozone-net
+
 networks:
   ozone-net:
     driver: bridge

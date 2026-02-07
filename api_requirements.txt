@@ -2,3 +2,4 @@ fastapi
 uvicorn
 trino
 python-multipart
+elasticsearch
