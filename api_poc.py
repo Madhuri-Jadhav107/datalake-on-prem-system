@@ -83,7 +83,7 @@ async def home_portal():
         other_tables = [t for t in tables if t not in pg_tables and t not in mysql_tables]
         
         def build_links(table_list, brand_class):
-            return "".join([f'<li><a href="/view/{t}" class="btn-table {brand_class}">{t}</a></li>' for t in table_list])
+            return "".join([f'<li><a href="/view/{table}" class="btn-table {brand_class}">{table}</a></li>' for table in table_list])
         
         pg_links = build_links(pg_tables, "pg-source")
         mysql_links = build_links(mysql_tables, "mysql-source")
@@ -96,64 +96,67 @@ async def home_portal():
                 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Outfit:wght@700&display=swap" rel="stylesheet">
                 <style>
                     body {{ font-family: 'Inter', sans-serif; margin: 0; background: #f8fafc; color: #0f172a; line-height: 1.5; }}
-                    .hero {{ background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; padding: 80px 20px; text-align: center; border-bottom: 4px solid #3b82f6; }}
-                    .hero h1 {{ font-family: 'Outfit', sans-serif; font-size: 3.5rem; margin-bottom: 10px; letter-spacing: -1px; }}
-                    .container {{ max-width: 1000px; margin: -50px auto 60px; background: white; padding: 50px; border-radius: 20px; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1); }}
-                    h2, h3 {{ font-family: 'Outfit', sans-serif; display: flex; align-items: center; gap: 10px; }}
-                    .source-section {{ margin-top: 40px; padding: 25px; border-radius: 16px; background: #f1f5f9; }}
-                    .pg-section {{ border-left: 8px solid #336791; }}
-                    .mysql-section {{ border-left: 8px solid #f29111; }}
-                    
-                    ul {{ list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; margin-top: 20px; }}
-                    .btn-table {{ display: block; padding: 22px; background: white; border: 2px solid transparent; border-radius: 12px; text-decoration: none; font-weight: 600; text-align: center; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }}
-                    .btn-table:hover {{ transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }}
-                    
-                    .pg-source {{ color: #336791; border-color: #33679122; }}
-                    .pg-source:hover {{ border-color: #336791; background: #3367910a; }}
-                    .mysql-source {{ color: #f29111; border-color: #f2911122; }}
-                    .mysql-source:hover {{ border-color: #f29111; background: #f291110a; }}
-                    .other-source {{ color: #64748b; }}
-                    
-                    .badge {{ font-size: 0.7em; padding: 4px 10px; border-radius: 100px; font-weight: bold; text-transform: uppercase; }}
-                    .bg-pg {{ background: #336791; color: white; }}
-                    .bg-mysql {{ background: #f29111; color: white; }}
+                    .hero {{ background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; padding: 60px 20px; text-align: center; border-bottom: 4px solid #3b82f6; }}
+                    .hero h1 {{ font-family: 'Outfit', sans-serif; font-size: 3rem; margin-bottom: 5px; }}
+                    .container {{ max-width: 1100px; margin: -40px auto 60px; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }}
+                    .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px; }}
+                    .card {{ background: #f1f5f9; padding: 25px; border-radius: 16px; border-top: 5px solid #cbd5e1; }}
+                    .pg-card {{ border-color: #336791; }}
+                    .mysql-card {{ border-color: #f29111; }}
+                    ul {{ list-style: none; padding: 0; display: grid; grid-template-columns: 1fr; gap: 10px; }}
+                    .btn-table {{ display: block; padding: 15px; background: white; border-radius: 8px; text-decoration: none; font-weight: 600; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+                    .btn-table:hover {{ transform: scale(1.02); }}
+                    .pg-source {{ color: #336791; }}
+                    .mysql-source {{ color: #f29111; }}
+                    .badge {{ font-size: 0.7em; padding: 3px 8px; border-radius: 10px; color: white; background: #64748b; font-weight: bold; margin-left: 5px; }}
+                    .btn-sql {{ display: inline-block; padding: 12px 24px; background: #3b82f6; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; }}
                 </style>
             </head>
             <body>
                 <div class="hero">
-                    <h1>Ozone Data Lake Admin</h1>
-                    <p style="opacity: 0.8; font-size: 1.2rem;">Multi-Source CDC Dashboard • Hive Metastore • Apache Iceberg</p>
+                    <h1>Ozone Unified Data Lake</h1>
+                    <p>One Platform • Multiple Sources • Infinite Insights</p>
                 </div>
                 <div class="container">
-                    <div class="source-section pg-section">
-                        <h2>🐘 PostgreSQL Sources <span class="badge bg-pg">Master</span></h2>
-                        <ul>{pg_links if pg_links else '<li><small>No Postgres tables detected</small></li>'}</ul>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+                        <h2 style="font-family: 'Outfit'; margin: 0;">🗂️ Data Catalog</h2>
+                        <a href="/sql-workspace" class="btn-sql">⚡ Open SQL Workspace</a>
                     </div>
 
-                    <div class="source-section mysql-section">
-                        <h2>🐬 MySQL Sources <span class="badge bg-mysql">Active</span></h2>
-                        <ul>{mysql_links if mysql_links else '<li><small>No MySQL tables detected</small></li>'}</ul>
+                    <div class="grid">
+                        <div class="card pg-card">
+                            <h3>🐘 PostgreSQL Sources</h3>
+                            <ul>{pg_links}</ul>
+                        </div>
+                        <div class="card mysql-card">
+                            <h3>🐬 MySQL Sources</h3>
+                            <ul>{mysql_links}</ul>
+                        </div>
                     </div>
 
-                    {f'''<div class="source-section"><h3>📁 Other Tables</h3><ul>{other_links}</ul></div>''' if other_tables else ''}
-                    
-                    <hr style="margin: 50px 0; border: 0; border-top: 1px solid #e2e8f0;">
-                    
-                    <div style="background: #0f172a; color: white; padding: 40px; border-radius: 20px;">
-                        <h3 style="color: #3b82f6;">🚀 Ingest New CSV Data</h3>
-                        <p style="opacity: 0.7;">Add local datasets directly to the Data Lake by uploading a CSV.</p>
+                    <div style="margin-top: 50px; background: #0f172a; color: white; padding: 40px; border-radius: 20px;">
+                        <h3 style="color: #3b82f6; margin-top: 0;">🚀 Ingest New CSV to Source</h3>
+                        <p style="opacity: 0.7;">Upload a data file and align it to a source system in the lake.</p>
                         <form action="/upload-ui" method="POST" enctype="multipart/form-data" style="margin-top: 25px;">
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
                                 <div>
-                                    <label style="display:block; margin-bottom: 8px; font-weight: 600;">Target Table Name:</label>
-                                    <input type="text" name="table_name" placeholder="e.g. ad_analytics" style="padding: 12px; width: 100%; border: 1px solid #334155; border-radius: 8px; background: #1e293b; color: white;" required>
+                                    <label style="display:block; margin-bottom: 5px; font-weight: 600;">Table Name:</label>
+                                    <input type="text" name="table_name" placeholder="e.g. sales_2024" style="padding: 10px; width: 100%; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: white;" required>
                                 </div>
                                 <div>
-                                    <label style="display:block; margin-bottom: 8px; font-weight: 600;">CSV File Selection:</label>
-                                    <input type="file" name="file" accept=".csv" style="padding: 9px; width: 100%; border: 1px solid #334155; border-radius: 8px; background: #1e293b; color: white;" required>
+                                    <label style="display:block; margin-bottom: 5px; font-weight: 600;">Target Source:</label>
+                                    <select name="source_type" style="padding: 10px; width: 100%; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: white;">
+                                        <option value="postgres">PostgreSQL 🐘</option>
+                                        <option value="mysql">MySQL 🐬</option>
+                                        <option value="none">Other / Generic</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="display:block; margin-bottom: 5px; font-weight: 600;">CSV File:</label>
+                                    <input type="file" name="file" accept=".csv" style="padding: 7px; width: 100%; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: white;" required>
                                 </div>
                             </div>
-                            <button type="submit" style="width: 100%; padding: 15px; background: #3b82f6; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s;">Run Distributed Ingest</button>
+                            <button type="submit" style="width: 100%; margin-top: 20px; padding: 15px; background: #3b82f6; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">Start Ingestion</button>
                         </form>
                     </div>
                 </div>
@@ -163,11 +166,73 @@ async def home_portal():
     except Exception as e:
         return f"<h1>Error reaching Trino</h1><p>{str(e)}</p>"
 
+@app.get("/sql-workspace", response_class=HTMLResponse)
+async def sql_workspace(query: Optional[str] = None):
+    """SQL Query Workspace for direct Trino interaction."""
+    results = []
+    columns = []
+    error = None
+    if query:
+        try:
+            conn = get_trino_conn()
+            cur = conn.cursor()
+            cur.execute(query)
+            if cur.description:
+                columns = [desc[0] for desc in cur.description]
+                results = cur.fetchall()
+        except Exception as e:
+            error = str(e)
+
+    return f"""
+    <html>
+        <head>
+            <title>Data Lake SQL Workspace</title>
+            <style>
+                body {{ font-family: 'Inter', sans-serif; margin: 40px; background: #f8fafc; }}
+                .editor-card {{ background: white; padding: 30px; border-radius: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }}
+                textarea {{ width: 100%; height: 150px; padding: 15px; border: 1px solid #cbd5e1; border-radius: 8px; font-family: monospace; font-size: 1rem; margin-bottom: 15px; }}
+                .btn-run {{ background: #3b82f6; color: white; padding: 12px 30px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 30px; background: white; }}
+                th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }}
+                th {{ background: #f1f5f9; color: #475569; text-transform: uppercase; font-size: 0.8rem; font-weight: 700; }}
+            </style>
+        </head>
+        <body>
+            <a href="/" style="text-decoration:none; color:#64748b">← Back to Catalog</a>
+            <h1 style="font-family: 'Outfit'; margin-top: 10px;">⚡ SQL Workspace</h1>
+            
+            <div class="editor-card">
+                <form action="/sql-workspace" method="GET">
+                    <label style="font-weight:600; display:block; margin-bottom:10px">Enter Your Trino SQL Query:</label>
+                    <textarea name="query" placeholder="SELECT * FROM cdc_mysql_customers LIMIT 10">{query or ''}</textarea>
+                    <div style="display:flex; gap:10px">
+                        <button type="submit" class="btn-run">Execute Query</button>
+                        <button type="button" onclick="document.getElementsByName('query')[0].value='SELECT * FROM cdc_mysql_customers LIMIT 10'" style="padding:10px; border-radius:8px; border:1px solid #ddd; background:none; cursor:pointer">Example: MySQL</button>
+                        <button type="button" onclick="document.getElementsByName('query')[0].value='SELECT * FROM cdc_customers LIMIT 10'" style="padding:10px; border-radius:8px; border:1px solid #ddd; background:none; cursor:pointer">Example: Postgres</button>
+                    </div>
+                </form>
+
+                {f'<div style="background:#fee2e2; color:#b91c1c; padding:15px; border-radius:8px; margin-top:20px"><b>SQL Error:</b> {error}</div>' if error else ''}
+
+                {f'''<table><thead><tr>{" ".join([f"<th>{c}</th>" for c in columns])}</tr></thead><tbody>{" ".join([f"<tr>{' '.join([f'<td>{v}</td>' for v in r])}</tr>" for r in results])}</tbody></table>''' if results else ''}
+            </div>
+        </body>
+    </html>
+    """
+
 @app.post("/upload-ui")
-async def upload_ui(table_name: str = Form(...), file: UploadFile = File(...)):
+async def upload_ui(table_name: str = Form(...), source_type: str = Form(...), file: UploadFile = File(...)):
     """Handles file upload from the Web UI and redirects to home."""
     try:
-        await upload_and_ingest(table_name, file)
+        # Automatically prefix based on source selection
+        target_name = table_name
+        if source_type == "mysql" and not table_name.startswith("mysql_"):
+            target_name = f"mysql_{table_name}"
+        elif source_type == "postgres" and not table_name.startswith("cdc_"):
+            # We use cdc_ for postgres to align with existing pattern
+            target_name = f"cdc_{table_name}"
+            
+        await upload_and_ingest(target_name, file)
         return RedirectResponse(url="/?msg=Ingestion+Started", status_code=303)
     except Exception as e:
         return f"<h1>Upload Failed</h1><p>{str(e)}</p><a href='/'>Go Back</a>"
