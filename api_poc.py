@@ -337,47 +337,33 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                         filters = " OR ".join([f'CAST("{c}" AS VARCHAR) LIKE ?' for c in search_targets])
                         query += f" WHERE ({filters})"
         
-        # 2.5 Identify Changed IDs for Snapshot View
-        changed_rows = {} # {id_val: (change_type, row_data)}
+        # 2.5 Manual Snapshot Diffing (State Comparison)
+        changed_rows = {} # {id_val: "ADDED/MODIFIED"}
         if snapshot:
-            print(f"DEBUG: Analyzing Snapshot {snapshot} for table {table_name}")
             try:
-                # 1. First, check what metadata tables are actually available
-                cur.execute(f"SHOW TABLES FROM {CATALOG}.{SCHEMA} LIKE '{table_name}$%'")
-                meta_tables = [r[0] for r in cur.fetchall()]
-                print(f"DEBUG: Available Metadata Tables: {meta_tables}")
+                # 1. Discover Parent Snapshot
+                cur.execute(f'SELECT "parent_id" FROM "{CATALOG}"."{SCHEMA}"."{table_name}$snapshots" WHERE "snapshot_id" = {snapshot}')
+                res = cur.fetchone()
+                parent_id = res[0] if res else None
                 
-                # 2. Query changelog if available
-                changelog_table = f'"{CATALOG}"."{SCHEMA}"."{table_name}$changelog"'
-                changelog_query = f"SELECT * FROM {changelog_table} WHERE snapshot_id = {snapshot}"
-                
-                # Check column names first
-                cur.execute(f"DESCRIBE {changelog_table}")
-                cl_cols_info = cur.fetchall()
-                cl_cols = [r[0].lower() for r in cl_cols_info] # Lowercase for safety
-                print(f"DEBUG: Changelog Columns: {cl_cols}")
-                
-                safe_execute(cur, changelog_query)
-                changelog_data = cur.fetchall()
-                print(f"DEBUG: Found {len(changelog_data)} changes in snapshot {snapshot}")
-                
-                for cl_row in changelog_data:
-                    row_dict = dict(zip(cl_cols, cl_row))
-                    # Trino changelog often uses 'change_type' or 'operation'
-                    op = row_dict.get('operation') or row_dict.get('_change_type') or row_dict.get('change_type')
+                if parent_id:
+                    print(f"DEBUG: Comparing snapshot {snapshot} with parent {parent_id}")
+                    # Fetch parent state for the same data (LIMIT 100 to find matches)
+                    parent_query = f"SELECT * FROM {full_table_path} FOR VERSION AS OF {parent_id} LIMIT 100"
+                    cur.execute(parent_query)
+                    parent_rows = cur.fetchall()
                     
-                    # Try to find the ID column value
-                    # We use the id_col name we discovered earlier
-                    rid = row_dict.get(id_col.lower())
+                    # Create a map of ID -> RowHash for the parent
+                    # Use string representation of row for easy comparison
+                    parent_map = {str(r[0]): hash(tuple(r)) for r in parent_rows}
                     
-                    if rid is not None and op:
-                        changed_rows[str(rid)] = str(op).upper()
-                        print(f"DEBUG: Record {rid} was {op}")
+                    # We will compare these against our current 'rows' later
+                else:
+                    parent_map = {}
             except Exception as e:
-                print(f"❌ Changelog Diagnostic Failed: {e}")
+                print(f"Parent Discovery Failed: {e}")
+                parent_map = {}
 
-        query += " LIMIT 50"
-        
         # Execute main data query
         if search and not search.isdigit() and not using_es and search_targets:
             params = [f"%{search}%"] * len(search_targets)
@@ -387,6 +373,16 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
             
         columns = [desc[0] for desc in cur.description]
         rows = cur.fetchall()
+
+        # 2.6 Perform Comparison
+        if snapshot:
+            for r in rows:
+                rid = str(r[0])
+                r_hash = hash(tuple(r))
+                if rid not in parent_map:
+                    changed_rows[rid] = "NEW"
+                elif parent_map[rid] != r_hash:
+                    changed_rows[rid] = "MODIFIED"
 
         # 3. Fetch Snapshot history for the sidebar (quoted metadata table)
         snapshot_query = f'SELECT "snapshot_id", "committed_at", "operation" FROM "{CATALOG}"."{SCHEMA}"."{table_name}$snapshots" ORDER BY "committed_at" DESC LIMIT 15'
@@ -437,12 +433,8 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
             
             if snapshot and row_id in changed_rows:
                 op = changed_rows[row_id]
-                if op == 'INSERT':
-                    row_style = "background-color: #dcfce7; color: #166534;" # Green highlight
-                    status_cell = '<td><span class="badge bg-success">Added/Modified</span></td>'
-                elif op == 'DELETE':
-                    row_style = "background-color: #fee2e2; color: #991b1b; text-decoration: line-through;" # Red highlight
-                    status_cell = '<td><span class="badge bg-danger">Deleted</span></td>'
+                row_style = "background-color: #dcfce7; color: #166534;" # Green highlight
+                status_cell = f'<td><span class="badge bg-success">{op}</span></td>'
             elif snapshot:
                 status_cell = '<td><small style="color:#999">-</small></td>'
 
