@@ -7,24 +7,31 @@ if len(sys.argv) < 2:
 
 table_name = sys.argv[1]
 
+# --- Configuration ---
+CATALOG_NAME = "iceberg_hive"
+WAREHOUSE_PATH = "s3a://madhuri-bucket/iceberg"
+
 # Initialize Spark Session with Iceberg and ES configs
 spark = SparkSession.builder \
     .appName(f"Sync-to-ES-{table_name}") \
-    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-    .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-    .config("spark.hadoop.fs.s3a.access.key", "anyID") \
-    .config("spark.hadoop.fs.s3a.secret.key", "anySecret") \
-    .config("spark.hadoop.fs.s3a.endpoint", "http://s3g:9878") \
-    .config("spark.hadoop.fs.s3a.path.style.access", "true") \
-    .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
-    .config("spark.sql.catalog.iceberg", "org.apache.iceberg.spark.SparkCatalog") \
-    .config("spark.sql.catalog.iceberg.type", "hive") \
-    .config("spark.sql.catalog.iceberg.uri", "thrift://hive-metastore:9083") \
-    .config("spark.sql.catalog.iceberg.warehouse", "s3a://madhuri-bucket/") \
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+    .config(f"spark.sql.catalog.{CATALOG_NAME}", "org.apache.iceberg.spark.SparkCatalog") \
+    .config(f"spark.sql.catalog.{CATALOG_NAME}.type", "hive") \
+    .config(f"spark.sql.catalog.{CATALOG_NAME}.uri", "thrift://hive-metastore:9083") \
+    .config(f"spark.sql.catalog.{CATALOG_NAME}.warehouse", WAREHOUSE_PATH) \
+    .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.endpoint", "http://s3g:9878") \
+    .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.access.key", "anyID") \
+    .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.secret.key", "anySecret") \
+    .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.path.style.access", "true") \
+    .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.connection.ssl.enabled", "false") \
+    .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+    .config(f"spark.sql.catalog.{CATALOG_NAME}.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+    .config("spark.sql.defaultCatalog", CATALOG_NAME) \
     .getOrCreate()
 
 print(f"Reading data from {table_name}...")
-df = spark.table(f"iceberg.trino_db.{table_name}")
+# Use the new catalog name
+df = spark.table(f"{CATALOG_NAME}.trino_db.{table_name}")
 
 # In a real enterprise setup, we would filter for a "last_sync" timestamp here
 # df = df.filter("updated_at > last_sync_timestamp")
