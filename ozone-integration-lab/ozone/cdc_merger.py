@@ -8,7 +8,7 @@ CATALOG_NAME = "iceberg_hive"
 DB_NAME = "trino_db"
 TABLE_NAME = "cdc_customers"
 KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
-KAFKA_TOPIC = "source_db.public.customers" # Debezium default topic format
+KAFKA_TOPIC_PATTERN = ".*\\.public\\.customers|.*\\.inventory\\.customers"
 
 def create_spark_session():
     return SparkSession.builder \
@@ -58,32 +58,56 @@ def process_batch(batch_df, batch_id):
 
     print(f"Processing batch {batch_id} with {batch_df.count()} events...")
     
-    # Deduplicate: Only keep the latest event for each record ID within this batch
-    window_spec = Window.partitionBy("id").orderBy(desc("timestamp"))
-    deduped_df = batch_df.withColumn("rn", row_number().over(window_spec)) \
-        .filter(col("rn") == 1) \
-        .drop("rn", "timestamp")
+    # Identify unique sources in this batch
+    sources = batch_df.select("topic").distinct().collect()
     
-    # Register deduplicated batch as temp view
-    deduped_df.createOrReplaceTempView("updates")
-    
-    # Perform MERGE INTO using the batch-specific session
-    # We use 'spark_catalog.default.updates' to ensure we don't look into the Iceberg catalog for the temp view
-    batch_df.sparkSession.sql(f"""
-        MERGE INTO {CATALOG_NAME}.{DB_NAME}.{TABLE_NAME} t
-        USING updates s
-        ON t.id = s.id
-        WHEN MATCHED AND s.op = 'd' THEN DELETE
-        WHEN MATCHED THEN UPDATE SET t.name = s.name, t.email = s.email, t.city = s.city
-        WHEN NOT MATCHED AND s.op != 'd' THEN INSERT (id, name, email, city) VALUES (s.id, s.name, s.email, s.city)
-    """)
+    for row in sources:
+        topic = row.topic
+        # Determine target table name based on topic
+        # Postgres: source_db.public.customers -> cdc_customers
+        # MySQL: mysql_source.inventory.customers -> cdc_mysql_customers
+        target_table = "cdc_customers" if "source_db" in topic else "cdc_mysql_customers"
+        
+        print(f"Merging events from topic '{topic}' into table '{target_table}'")
+        
+        # Filter data for this specific source
+        source_df = batch_df.filter(col("topic") == topic)
+        
+        # Deduplicate: Only keep the latest event for each record ID within this batch
+        window_spec = Window.partitionBy("id").orderBy(desc("timestamp"))
+        deduped_df = source_df.withColumn("rn", row_number().over(window_spec)) \
+            .filter(col("rn") == 1) \
+            .drop("rn", "timestamp", "topic")
+        
+        # Ensure target table exists (Auto-create)
+        batch_df.sparkSession.sql(f"""
+            CREATE TABLE IF NOT EXISTS {CATALOG_NAME}.{DB_NAME}.{target_table} (
+                id INT,
+                name STRING,
+                email STRING,
+                city STRING
+            ) USING iceberg
+        """)
+        
+        # Register deduplicated batch as temp view
+        deduped_df.createOrReplaceTempView("updates")
+        
+        # Perform MERGE INTO
+        batch_df.sparkSession.sql(f"""
+            MERGE INTO {CATALOG_NAME}.{DB_NAME}.{target_table} t
+            USING updates s
+            ON t.id = s.id
+            WHEN MATCHED AND s.op = 'd' THEN DELETE
+            WHEN MATCHED THEN UPDATE SET t.name = s.name, t.email = s.email, t.city = s.city
+            WHEN NOT MATCHED AND s.op != 'd' THEN INSERT (id, name, email, city) VALUES (s.id, s.name, s.email, s.city)
+        """)
 
 if __name__ == "__main__":
     spark = create_spark_session()
     
-    # Create table if not exists with correct schema
+    # Create initial table if not exists (Postgres source)
     spark.sql(f"""
-        CREATE TABLE IF NOT EXISTS {CATALOG_NAME}.{DB_NAME}.{TABLE_NAME} (
+        CREATE TABLE IF NOT EXISTS {CATALOG_NAME}.{DB_NAME}.cdc_customers (
             id INT,
             name STRING,
             email STRING,
@@ -91,21 +115,23 @@ if __name__ == "__main__":
         ) USING iceberg
     """)
 
-    # Read from Kafka
+    # Read from Kafka using subscribePattern for multi-source
     raw_df = spark.readStream \
         .format("kafka") \
         .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS) \
-        .option("subscribe", KAFKA_TOPIC) \
+        .option("subscribePattern", KAFKA_TOPIC_PATTERN) \
         .option("startingOffsets", "earliest") \
         .load()
 
     # Parse JSON and handle Debezium 'before'/'after' for ID
-    # We include 'timestamp' from Kafka to deduplicate in case of multiple updates in one batch
+    # We include 'timestamp' and 'topic' from Kafka to route and deduplicate
     parsed_df = raw_df.select(
             col("timestamp"),
+            col("topic"),
             from_json(col("value").cast("string"), schema).alias("data")
         ).select(
             col("timestamp"),
+            col("topic"),
             col("data.payload.before.id").alias("before_id"),
             col("data.payload.after.id").alias("after_id"),
             col("data.payload.after.name").alias("name"),
@@ -114,6 +140,7 @@ if __name__ == "__main__":
             col("data.payload.op").alias("op")
         ).selectExpr(
             "timestamp",
+            "topic",
             "coalesce(after_id, before_id) as id",
             "name", "email", "city", "op"
         )
