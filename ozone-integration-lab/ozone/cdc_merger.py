@@ -5,7 +5,7 @@ from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 # --- Configuration ---
 CATALOG_NAME = "iceberg_hive"
 DB_NAME = "trino_db"
-TABLE_NAME = "customers"
+TABLE_NAME = "cdc_customers"
 KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
 KAFKA_TOPIC = "source_db.public.customers" # Debezium default topic format
 
@@ -32,6 +32,12 @@ def create_spark_session():
 # Note: This should match your source table columns
 schema = StructType([
     StructField("payload", StructType([
+        StructField("before", StructType([
+            StructField("id", IntegerType()),
+            StructField("name", StringType()),
+            StructField("email", StringType()),
+            StructField("city", StringType())
+        ])),
         StructField("after", StructType([
             StructField("id", IntegerType()),
             StructField("name", StringType()),
@@ -48,15 +54,14 @@ def process_batch(batch_df, batch_id):
 
     print(f"Processing batch {batch_id} with {batch_df.count()} events...")
     
-    # Register batch as temp view
+    # Register batch as temp view in the batch-specific session
     batch_df.createOrReplaceTempView("updates")
     
-    # Perform MERGE INTO
-    # We handle 'c' (create) and 'u' (update) by upserting
-    # For 'd' (delete), you would add a DELETE logic
-    spark.sql(f"""
+    # Perform MERGE INTO using the batch-specific session
+    # We use 'spark_catalog.default.updates' to ensure we don't look into the Iceberg catalog for the temp view
+    batch_df.sparkSession.sql(f"""
         MERGE INTO {CATALOG_NAME}.{DB_NAME}.{TABLE_NAME} t
-        USING updates s
+        USING spark_catalog.default.updates s
         ON t.id = s.id
         WHEN MATCHED AND s.op = 'd' THEN DELETE
         WHEN MATCHED THEN UPDATE SET t.name = s.name, t.email = s.email, t.city = s.city
@@ -66,6 +71,16 @@ def process_batch(batch_df, batch_id):
 if __name__ == "__main__":
     spark = create_spark_session()
     
+    # Create table if not exists with correct schema
+    spark.sql(f"""
+        CREATE TABLE IF NOT EXISTS {CATALOG_NAME}.{DB_NAME}.{TABLE_NAME} (
+            id INT,
+            name STRING,
+            email STRING,
+            city STRING
+        ) USING iceberg
+    """)
+
     # Read from Kafka
     raw_df = spark.readStream \
         .format("kafka") \
@@ -74,11 +89,21 @@ if __name__ == "__main__":
         .option("startingOffsets", "earliest") \
         .load()
 
-    # Parse JSON
+    # Parse JSON and handle Debezium 'before'/'after' for ID
     parsed_df = raw_df.selectExpr("CAST(value AS STRING)") \
         .select(from_json(col("value"), schema).alias("data")) \
-        .select("data.payload.after.*", "data.payload.op") \
-        .filter("id IS NOT NULL") # Skip deletes where after is null or malformed data
+        .select(
+            col("data.payload.before.id").alias("before_id"),
+            col("data.payload.after.id").alias("after_id"),
+            col("data.payload.after.name").alias("name"),
+            col("data.payload.after.email").alias("email"),
+            col("data.payload.after.city").alias("city"),
+            col("data.payload.op").alias("op")
+        ) \
+        .selectExpr(
+            "coalesce(after_id, before_id) as id",
+            "name", "email", "city", "op"
+        )
 
     # Write to Iceberg via foreachBatch
     query = parsed_df.writeStream \
