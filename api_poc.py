@@ -38,6 +38,18 @@ def get_es_client():
     except:
         return None
 
+# --- Global Safety Helpers ---
+def safe_execute(cursor, query_str, params=None):
+    """Executes a query with detailed logging for debugging."""
+    try:
+        if params: cursor.execute(query_str, params)
+        else: cursor.execute(query_str)
+    except Exception as e:
+        print(f"\n❌ TRINO ERROR: {str(e)}")
+        print(f"FAILED QUERY: {query_str}")
+        if params: print(f"PARAMS: {params}")
+        raise
+
 async def es_search(table_name: str, keyword: str):
     """Hits Elasticsearch for high-speed keyword search across all columns."""
     try:
@@ -283,17 +295,6 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
     try:
         conn = get_trino_conn()
         cur = conn.cursor()
-        
-        # Helper for safer execution with logging
-        def safe_execute(cursor, query_str, params=None):
-            try:
-                if params: cursor.execute(query_str, params)
-                else: cursor.execute(query_str)
-            except Exception as e:
-                print(f"\n❌ TRINO ERROR: {str(e)}")
-                print(f"FAILED QUERY: {query_str}")
-                if params: print(f"PARAMS: {params}")
-                raise
         
         # 1. Construct Query (Standard or Time Travel)
         # Use full catalog.schema.table for absolute safety
@@ -609,13 +610,16 @@ async def get_cast_val(col_type: str, val: str):
 
 @app.post("/update/{table_name}/{record_id}")
 async def update_record(table_name: str, record_id: str, request: Request):
-    """Handles manual record update in Trino with automatic type casting."""
+    """Handles manual record update in Trino with automatic type casting and robust quoting."""
     try:
         form_data = await request.form()
         conn = get_trino_conn()
         cur = conn.cursor()
         
-        cur.execute(f"DESCRIBE {table_name}")
+        # Use quoted identifiers for absolute safety
+        full_table_path = f'"{CATALOG}"."{SCHEMA}"."{table_name}"'
+        
+        cur.execute(f"DESCRIBE {full_table_path}")
         schema_info = {row[0]: row[1] for row in cur.fetchall()}
         id_col = list(schema_info.keys())[0]
         
@@ -624,17 +628,19 @@ async def update_record(table_name: str, record_id: str, request: Request):
         
         for col, val in form_data.items():
             if col == id_col: continue # Don't update the ID
-            update_parts.append(f"{col} = ?")
+            # IMPORTANT: Quote column names
+            update_parts.append(f'"{col}" = ?')
             vals.append(await get_cast_val(schema_info[col], val))
 
         # Add the ID for the WHERE clause
         vals.append(await get_cast_val(schema_info[id_col], record_id))
         
-        query = f"UPDATE {table_name} SET {', '.join(update_parts)} WHERE {id_col} = ?"
-        cur.execute(query, vals)
+        query = f'UPDATE {full_table_path} SET {", ".join(update_parts)} WHERE "{id_col}" = ?'
+        safe_execute(cur, query, vals)
         
         return RedirectResponse(url=f"/view/{table_name}", status_code=303)
     except Exception as e:
+        print(f"Mutation Failed: {e}")
         raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
 
 @app.post("/insert/{table_name}")
@@ -676,26 +682,25 @@ async def insert_record(table_name: str, request: Request):
 
 @app.post("/delete/{table_name}/{record_id}")
 async def delete_record(table_name: str, record_id: str):
-    """Handles record deletion by the first column (assumed ID)."""
+    """Handles record deletion with robust identifier quoting."""
     try:
         conn = get_trino_conn()
         cur = conn.cursor()
         
+        full_table_path = f'"{CATALOG}"."{SCHEMA}"."{table_name}"'
+        
         # Get the prime column (usually ID)
-        cur.execute(f"DESCRIBE {table_name}")
+        cur.execute(f"DESCRIBE {full_table_path}")
         schema = cur.fetchall()
         id_col = schema[0][0]
         id_type = schema[0][1].lower()
         
         # Cast the ID correctly
-        if "int" in id_type:
-            val = int(record_id)
-        elif "double" in id_type or "real" in id_type:
-            val = float(record_id)
-        else:
-            val = record_id
+        val = await get_cast_val(id_type, record_id)
             
-        cur.execute(f"DELETE FROM {table_name} WHERE {id_col} = ?", (val,))
+        query = f'DELETE FROM {full_table_path} WHERE "{id_col}" = ?'
+        safe_execute(cur, query, (val,))
         return RedirectResponse(url=f"/view/{table_name}", status_code=303)
     except Exception as e:
+        print(f"Deletion Failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
