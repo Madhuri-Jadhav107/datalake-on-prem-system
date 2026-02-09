@@ -120,7 +120,7 @@ services:
     image: trinodb/trino:466
     hostname: trino-coordinator
     ports:
-      - "18082:8080"
+      -"18082:8084"
     volumes:
       - ./trino/etc:/etc/trino
     networks:
@@ -133,7 +133,7 @@ services:
     image: postgres:11
     hostname: metastore-db
     ports:
-      - "15433:5435"
+      -  "5433:5432"
     environment:
       POSTGRES_USER: hive
       POSTGRES_PASSWORD: hive
