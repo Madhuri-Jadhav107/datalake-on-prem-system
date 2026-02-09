@@ -24,8 +24,9 @@ services:
       ENSURE_SCM_INITIALIZED: /data/metadata/scm/current/VERSION
       OZONE-SITE.XML_hdds.scm.safemode.min.datanode: "1"
     ports:
-      - "19860:9860"
-      - "19876:9876"
+      - "29860:9860"
+      - "29876:9876"
+
 
   # -------------------------
   # Ozone OM
