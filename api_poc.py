@@ -389,11 +389,13 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
             for r in rows:
                 rid = str(r[0])
                 if rid not in parent_map:
-                    changed_rows[rid] = "NEW"
+                    # ONLY mark as NEW if parent_map actually has data (to avoid false positives if parent fetch failed)
+                    if parent_map:
+                        changed_rows[rid] = "NEW"
                 else:
                     parent_row = parent_map[rid]
-                    # Check if ANY field changed
-                    if hash(tuple(r)) != hash(tuple(parent_row)):
+                    # Direct comparison is safer than hash()
+                    if tuple(r) != tuple(parent_row):
                         changed_rows[rid] = "MODIFIED"
 
         # 3. Fetch Snapshot history for the sidebar (quoted metadata table)
@@ -445,7 +447,11 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
             
             if snapshot and row_id in changed_rows:
                 op = changed_rows[row_id]
-                row_style = "background-color: #dcfce7; color: #166534;" # Green highlight
+                if op == "NEW":
+                    row_style = "background-color: #dcfce7; color: #166534;" # Green for new rows
+                else:
+                    # Very subtle background for modified rows (less distracting)
+                    row_style = "background-color: #f8fafc;" 
                 status_cell = f'<td><span class="badge bg-success">{op}</span></td>'
             elif snapshot:
                 status_cell = '<td><small style="color:#999">-</small></td>'
