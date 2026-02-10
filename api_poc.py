@@ -296,8 +296,9 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
             
             if ids is not None and len(ids) > 0:
                 # Use ES results to filter Trino
-                id_list = ",".join([f"'{i}'" if not str(i).isdigit() else str(i) for i in ids])
-                query += f' WHERE "{id_col}" IN ({id_list})'
+                # We cast the ID column to VARCHAR for robust matching against ES string IDs
+                id_list = ",".join([f"'{i}'" for i in ids])
+                query += f' WHERE CAST("{id_col}" AS VARCHAR) IN ({id_list})'
                 using_es = True
             else:
                 # FALLBACK to standard Trino search
