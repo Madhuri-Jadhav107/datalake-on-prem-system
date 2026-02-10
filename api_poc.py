@@ -320,6 +320,8 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
         
         # 2. Handle Search (Enterprise ES Search vs. Trino Fallback)
         using_es = False
+        where_clause = ""
+        params = []
         if search:
             # TRY ELASTICSEARCH FIRST (for 1.6B record scale)
             ids = await es_search(table_name, search, id_col)
@@ -327,19 +329,23 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
             if ids is not None and len(ids) > 0:
                 # Use ES results to filter Trino
                 id_list = ",".join([f"'{i}'" for i in ids])
-                query += f' WHERE CAST("{id_col}" AS VARCHAR) IN ({id_list})'
+                where_clause = f' WHERE CAST("{id_col}" AS VARCHAR) IN ({id_list})'
                 using_es = True
             else:
                 # FALLBACK to standard Trino search
                 if search.isdigit():
                     # Direct ID match if input is numeric
-                    query += f' WHERE CAST("{id_col}" AS VARCHAR) = \'{search}\''
+                    where_clause = f' WHERE CAST("{id_col}" AS VARCHAR) = \'{search}\''
                 else:
                     # Multi-column substring match
                     search_cols = list(set([id_col] + search_targets))
                     filters = " OR ".join([f'CAST("{c}" AS VARCHAR) LIKE ?' for c in search_cols])
-                    query += f" WHERE ({filters})"
+                    where_clause = f" WHERE ({filters})"
+                    params = [f"%{search}%"] * len(search_cols)
                 using_es = False
+        
+        # Finalize the main query with WHERE, ORDER BY, and LIMIT
+        query = f"{base_query} {where_clause} ORDER BY \"{id_col}\" DESC LIMIT 100"
         
         # 2.5 Manual Snapshot Diffing (State Comparison)
         changed_rows = {} # {id_val: "ADDED/MODIFIED"}
@@ -353,11 +359,10 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                 if parent_id:
                     print(f"DEBUG: Comparing snapshot {snapshot} with parent {parent_id}")
                     # Fetch parent state for the same data 
-                    # Use same query structure to match results
+                    # Use exactly the same filters, ordering, and limit
                     parent_full_query = query.replace(full_table_path, f"{full_table_path} FOR VERSION AS OF {parent_id}")
                     try:
-                        if search and not search.isdigit() and not using_es and search_targets:
-                            # Re-use params for the parent query if search was active
+                        if params:
                             safe_execute(cur, parent_full_query, params)
                         else:
                             safe_execute(cur, parent_full_query)
@@ -375,8 +380,7 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                 parent_map = {}
 
         # Execute main data query
-        if search and not search.isdigit() and not using_es and search_targets:
-            params = [f"%{search}%"] * len(search_targets)
+        if params:
             safe_execute(cur, query, params)
         else:
             safe_execute(cur, query)
@@ -450,8 +454,8 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                 if op == "NEW":
                     row_style = "background-color: #dcfce7; color: #166534;" # Green for new rows
                 else:
-                    # Very subtle background for modified rows (less distracting)
-                    row_style = "background-color: #f8fafc;" 
+                    # Distinct highlight for modified rows
+                    row_style = "background-color: #fffbeb; color: #856404;" # Light Yellow
                 status_cell = f'<td><span class="badge bg-success">{op}</span></td>'
             elif snapshot:
                 status_cell = '<td><small style="color:#999">-</small></td>'
