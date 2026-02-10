@@ -6,7 +6,7 @@ import os
 # Define the Iceberg Catalog pointing to Ozone
 CATALOG_NAME = "ozone_hadoop_catalog"
 # Using explicit hostname 'om' which matches docker-compose service name
-WAREHOUSE_PATH = "ofs://om/vol1/bucket1/iceberg"
+WAREHOUSE_PATH = "ofs://om/madhuri-vol/bucket1/iceberg"
 
 # Input/Output defaults
 DEFAULT_INPUT = "/home/iceberg/local/sample.csv"
@@ -78,7 +78,7 @@ def main():
         try:
             print("Checking connectivity to Ozone...")
             fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
-            path = spark._jvm.org.apache.hadoop.fs.Path("/vol1/bucket1")
+            path = spark._jvm.org.apache.hadoop.fs.Path("/madhuri-vol/bucket1")
             exists = fs.exists(path)
             print(f"Target bucket exists: {exists}")
         except Exception as conn_err:
