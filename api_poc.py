@@ -360,7 +360,8 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                     print(f"DEBUG: Comparing snapshot {snapshot} with parent {parent_id}")
                     # Fetch parent state for the same data 
                     # Use exactly the same filters, ordering, and limit
-                    parent_full_query = query.replace(full_table_path, f"{full_table_path} FOR VERSION AS OF {parent_id}")
+                    # We replace the current snapshot ID with the parent snapshot ID in the query
+                    parent_full_query = query.replace(f"FOR VERSION AS OF {snapshot}", f"FOR VERSION AS OF {parent_id}")
                     try:
                         if params:
                             safe_execute(cur, parent_full_query, params)
