@@ -58,31 +58,32 @@ async def es_search(table_name: str, keyword: str, id_col: str):
         
         index_name = table_name.lower()
         
-        # Stricter query: prioritize whole words and handle numbers
+        # High precision query: 
+        # 1. 'must' ensures ALL words are present (operator: and)
+        # 2. 'match_phrase' boosts the exact sequence for perfect matches
         res = es.search(index=index_name, body={
             "query": {
                 "bool": {
-                    "should": [
-                        # 1. Precise match across all fields (must contain all words if multiple)
+                    "must": [
                         {
                             "multi_match": {
                                 "query": keyword,
                                 "fields": ["*"],
-                                "type": "best_fields",
-                                "operator": "and",
-                                "boost": 2.0
-                            }
-                        },
-                        # 2. Fuzzy match for typo tolerance
-                        {
-                            "multi_match": {
-                                "query": keyword,
-                                "fields": ["*"],
-                                "fuzziness": "AUTO"
+                                "type": "cross_fields",
+                                "operator": "and"
                             }
                         }
                     ],
-                    "minimum_should_match": 1
+                    "should": [
+                        {
+                            "multi_match": {
+                                "query": keyword,
+                                "fields": ["*"],
+                                "type": "phrase",
+                                "boost": 10.0
+                            }
+                        }
+                    ]
                 }
             },
             "size": 50
