@@ -654,8 +654,10 @@ async def insert_record(table_name: str, request: Request):
         conn = get_trino_conn()
         cur = conn.cursor()
         
+        full_table_path = f'"{CATALOG}"."{SCHEMA}"."{table_name}"'
+        
         # 1. Fetch column types from the table to handle strict Trino typing
-        cur.execute(f"DESCRIBE {table_name}")
+        cur.execute(f"DESCRIBE {full_table_path}")
         schema_info = {row[0]: row[1] for row in cur.fetchall()} # {col_name: type_name}
         
         cols = []
@@ -664,7 +666,8 @@ async def insert_record(table_name: str, request: Request):
         
         for col, val in form_data.items():
             if col not in schema_info: continue
-            cols.append(col)
+            # Quote the column name to handle reserved words or special chars
+            cols.append(f'"{col}"')
             
             # 2. Cast string values from form to the correct Trino type
             vals.append(await get_cast_val(schema_info[col], val))
@@ -674,7 +677,7 @@ async def insert_record(table_name: str, request: Request):
         params_str = ", ".join(params)
         
         # 3. Use parameterized query to prevent SQL injection and fix formatting
-        query = f"INSERT INTO {table_name} ({cols_str}) VALUES ({params_str})"
+        query = f"INSERT INTO {full_table_path} ({cols_str}) VALUES ({params_str})"
         cur.execute(query, vals)
         
         return RedirectResponse(url=f"/view/{table_name}", status_code=303)
