@@ -51,19 +51,38 @@ def safe_execute(cursor, query_str, params=None):
         raise
 
 async def es_search(table_name: str, keyword: str, id_col: str):
-    """Hits Elasticsearch for high-speed keyword search across all columns."""
+    """Hits Elasticsearch for high-speed keyword search across all columns with precision."""
     try:
         es = get_es_client()
         if not es: return None
         
         index_name = table_name.lower()
         
+        # Stricter query: prioritize whole words and handle numbers
         res = es.search(index=index_name, body={
             "query": {
-                "multi_match": {
-                    "query": keyword,
-                    "fields": ["*"],
-                    "fuzziness": "AUTO"
+                "bool": {
+                    "should": [
+                        # 1. Precise match across all fields (must contain all words if multiple)
+                        {
+                            "multi_match": {
+                                "query": keyword,
+                                "fields": ["*"],
+                                "type": "best_fields",
+                                "operator": "and",
+                                "boost": 2.0
+                            }
+                        },
+                        # 2. Fuzzy match for typo tolerance
+                        {
+                            "multi_match": {
+                                "query": keyword,
+                                "fields": ["*"],
+                                "fuzziness": "AUTO"
+                            }
+                        }
+                    ],
+                    "minimum_should_match": 1
                 }
             },
             "size": 50
@@ -75,16 +94,15 @@ async def es_search(table_name: str, keyword: str, id_col: str):
         results = []
         for hit in hits:
             source = hit['_source']
-            # Robust case-insensitive lookup for the ID column
-            # (e.g., Trino says 'index', but ES has 'Index')
             found_id = None
+            # Check for ID column case-insensitively
             for key, val in source.items():
                 if key.lower() == id_col.lower():
                     found_id = val
                     break
             
-            # Fallback to ES internal ID if no match found
-            results.append(found_id if found_id is not None else hit['_id'])
+            # Map back to string for the Trino IN clause
+            results.append(str(found_id if found_id is not None else hit['_id']))
             
         return results
     except Exception as e:
@@ -307,18 +325,20 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
             
             if ids is not None and len(ids) > 0:
                 # Use ES results to filter Trino
-                # We cast the ID column to VARCHAR for robust matching against ES string IDs
                 id_list = ",".join([f"'{i}'" for i in ids])
                 query += f' WHERE CAST("{id_col}" AS VARCHAR) IN ({id_list})'
                 using_es = True
             else:
                 # FALLBACK to standard Trino search
                 if search.isdigit():
-                    query += f' WHERE "{id_col}" = {search}'
+                    # Direct ID match if input is numeric
+                    query += f' WHERE CAST("{id_col}" AS VARCHAR) = \'{search}\''
                 else:
-                    if search_targets:
-                        filters = " OR ".join([f'CAST("{c}" AS VARCHAR) LIKE ?' for c in search_targets])
-                        query += f" WHERE ({filters})"
+                    # Multi-column substring match
+                    search_cols = list(set([id_col] + search_targets))
+                    filters = " OR ".join([f'CAST("{c}" AS VARCHAR) LIKE ?' for c in search_cols])
+                    query += f" WHERE ({filters})"
+                using_es = False
         
         # 2.5 Manual Snapshot Diffing (State Comparison)
         changed_rows = {} # {id_val: "ADDED/MODIFIED"}
