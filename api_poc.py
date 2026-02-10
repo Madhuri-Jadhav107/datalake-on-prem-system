@@ -352,16 +352,22 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                 
                 if parent_id:
                     print(f"DEBUG: Comparing snapshot {snapshot} with parent {parent_id}")
-                    # Fetch parent state for the same data (LIMIT 100 to find matches)
-                    parent_query = f"SELECT * FROM {full_table_path} FOR VERSION AS OF {parent_id} LIMIT 100"
-                    cur.execute(parent_query)
-                    parent_rows = cur.fetchall()
-                    
-                    # Create a map of ID -> RowHash for the parent
-                    # Use string representation of row for easy comparison
-                    parent_map = {str(r[0]): hash(tuple(r)) for r in parent_rows}
-                    
-                    # We will compare these against our current 'rows' later
+                    # Fetch parent state for the same data 
+                    # Use same query structure to match results
+                    parent_full_query = query.replace(full_table_path, f"{full_table_path} FOR VERSION AS OF {parent_id}")
+                    try:
+                        if search and not search.isdigit() and not using_es and search_targets:
+                            # Re-use params for the parent query if search was active
+                            safe_execute(cur, parent_full_query, params)
+                        else:
+                            safe_execute(cur, parent_full_query)
+                        
+                        parent_rows = cur.fetchall()
+                        # Create a map of ID -> Full Row for comparison
+                        parent_map = {str(r[0]): r for r in parent_rows}
+                    except Exception as pe:
+                        print(f"Parent Data Fetch Failed (Snapshot might be too old): {pe}")
+                        parent_map = {}
                 else:
                     parent_map = {}
             except Exception as e:
@@ -382,11 +388,13 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
         if snapshot:
             for r in rows:
                 rid = str(r[0])
-                r_hash = hash(tuple(r))
                 if rid not in parent_map:
                     changed_rows[rid] = "NEW"
-                elif parent_map[rid] != r_hash:
-                    changed_rows[rid] = "MODIFIED"
+                else:
+                    parent_row = parent_map[rid]
+                    # Check if ANY field changed
+                    if hash(tuple(r)) != hash(tuple(parent_row)):
+                        changed_rows[rid] = "MODIFIED"
 
         # 3. Fetch Snapshot history for the sidebar (quoted metadata table)
         snapshot_query = f'SELECT "snapshot_id", "committed_at", "operation" FROM "{CATALOG}"."{SCHEMA}"."{table_name}$snapshots" ORDER BY "committed_at" DESC LIMIT 15'
@@ -442,7 +450,18 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
             elif snapshot:
                 status_cell = '<td><small style="color:#999">-</small></td>'
 
-            row_cells = "".join([f"<td>{v}</td>" for v in r])
+            row_cells = ""
+            for i, val in enumerate(r):
+                cell_content = str(val)
+                # If MODIFIED, check if THIS specific field changed
+                if snapshot and row_id in changed_rows and changed_rows[row_id] == "MODIFIED":
+                    if row_id in parent_map:
+                        parent_val = parent_map[row_id][i]
+                        if str(parent_val) != str(val):
+                            # Show diff in the cell
+                            cell_content = f'<span style="color:#94a3b8; text-decoration:line-through; font-size:0.8em; margin-right:5px">{parent_val}</span><b style="color:#166534">→ {val}</b>'
+
+                row_cells += f"<td>{cell_content}</td>"
             actions = ""
             if not snapshot: # Only allow edits on the 'latest' view
                 actions = f"""
