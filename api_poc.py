@@ -50,32 +50,43 @@ def safe_execute(cursor, query_str, params=None):
         if params: print(f"PARAMS: {params}")
         raise
 
-async def es_search(table_name: str, keyword: str):
+async def es_search(table_name: str, keyword: str, id_col: str):
     """Hits Elasticsearch for high-speed keyword search across all columns."""
     try:
         es = get_es_client()
         if not es: return None
         
-        # We index using lowercase table name
         index_name = table_name.lower()
         
         res = es.search(index=index_name, body={
             "query": {
                 "multi_match": {
                     "query": keyword,
-                    "fields": ["*"], # Search across all indexed fields
+                    "fields": ["*"],
                     "fuzziness": "AUTO"
                 }
             },
             "size": 50
         })
         
-        # Extract IDs to filter Trino
         hits = res['hits']['hits']
         if not hits: return []
         
-        # Assume 'id' column exists or use ES internal ID
-        return [hit['_source'].get('id') or hit['_id'] for hit in hits]
+        results = []
+        for hit in hits:
+            source = hit['_source']
+            # Robust case-insensitive lookup for the ID column
+            # (e.g., Trino says 'index', but ES has 'Index')
+            found_id = None
+            for key, val in source.items():
+                if key.lower() == id_col.lower():
+                    found_id = val
+                    break
+            
+            # Fallback to ES internal ID if no match found
+            results.append(found_id if found_id is not None else hit['_id'])
+            
+        return results
     except Exception as e:
         print(f"ES Search Error: {e}")
         return None
@@ -292,7 +303,7 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
         using_es = False
         if search:
             # TRY ELASTICSEARCH FIRST (for 1.6B record scale)
-            ids = await es_search(table_name, search)
+            ids = await es_search(table_name, search, id_col)
             
             if ids is not None and len(ids) > 0:
                 # Use ES results to filter Trino
