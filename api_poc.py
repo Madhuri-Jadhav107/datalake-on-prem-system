@@ -38,6 +38,15 @@ def get_es_client():
     except:
         return None
 
+def find_id_col(all_cols):
+    """Smarter discovery of the Primary ID column for diffing and search."""
+    common_ids = ['id', 'index', 'internal id', 'internal_id', 'uid', 'customer_id', 'product_id']
+    for c in all_cols:
+        if c.lower() in common_ids:
+            return c
+    # Fallback to the first column if no common name matches
+    return all_cols[0] if all_cols else "id"
+
 # --- Global Safety Helpers ---
 def safe_execute(cursor, query_str, params=None):
     """Executes a query with detailed logging for debugging."""
@@ -312,7 +321,7 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
         cur.execute(f"DESCRIBE {full_table_path}")
         cols_info = cur.fetchall()
         all_cols = [row[0] for row in cols_info]
-        id_col = all_cols[0] if all_cols else "id"
+        id_col = find_id_col(all_cols)
         
         # Identify VARCHAR/STRING columns for standard search fallback
         string_cols = [row[0] for row in cols_info if 'varchar' in str(row[1]).lower() or 'string' in str(row[1]).lower()]
@@ -352,7 +361,9 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
         if snapshot:
             try:
                 # 1. Discover Parent Snapshot
-                cur.execute(f'SELECT "parent_id" FROM "{CATALOG}"."{SCHEMA}"."{table_name}$snapshots" WHERE "snapshot_id" = {snapshot}')
+                # Correctly quote metadata table names for Iceberg (e.g. "table$snapshots")
+                snapshot_meta_table = f'"{CATALOG}"."{SCHEMA}"."{table_name}$snapshots"'
+                cur.execute(f'SELECT "parent_id" FROM {snapshot_meta_table} WHERE "snapshot_id" = {snapshot}')
                 res = cur.fetchone()
                 parent_id = res[0] if res else None
                 
@@ -404,7 +415,8 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                         changed_rows[rid] = "MODIFIED"
 
         # 3. Fetch Snapshot history for the sidebar (quoted metadata table)
-        snapshot_query = f'SELECT "snapshot_id", "committed_at", "operation" FROM "{CATALOG}"."{SCHEMA}"."{table_name}$snapshots" ORDER BY "committed_at" DESC LIMIT 15'
+        snapshot_meta_table = f'"{CATALOG}"."{SCHEMA}"."{table_name}$snapshots"'
+        snapshot_query = f'SELECT "snapshot_id", "committed_at", "operation" FROM {snapshot_meta_table} ORDER BY "committed_at" DESC LIMIT 15'
         safe_execute(cur, snapshot_query)
         snapshots_data = cur.fetchall()
 
