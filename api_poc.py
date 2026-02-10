@@ -150,18 +150,10 @@ async def home_portal():
                         <h3 style="color: #3b82f6; margin-top: 0;">🚀 Ingest New CSV to Source</h3>
                         <p style="opacity: 0.7;">Upload a data file and align it to a source system in the lake.</p>
                         <form action="/upload-ui" method="POST" enctype="multipart/form-data" style="margin-top: 25px;">
-                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                                 <div>
                                     <label style="display:block; margin-bottom: 5px; font-weight: 600;">Table Name:</label>
                                     <input type="text" name="table_name" placeholder="e.g. sales_2024" style="padding: 10px; width: 100%; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: white;" required>
-                                </div>
-                                <div>
-                                    <label style="display:block; margin-bottom: 5px; font-weight: 600;">Target Source:</label>
-                                    <select name="source_type" style="padding: 10px; width: 100%; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: white;">
-                                        <option value="postgres">PostgreSQL 🐘</option>
-                                        <option value="mysql">MySQL 🐬</option>
-                                        <option value="none">Other / Generic</option>
-                                    </select>
                                 </div>
                                 <div>
                                     <label style="display:block; margin-bottom: 5px; font-weight: 600;">CSV File:</label>
@@ -236,18 +228,10 @@ async def sql_workspace(query: Optional[str] = None):
     """
 
 @app.post("/upload-ui")
-async def upload_ui(table_name: str = Form(...), source_type: str = Form(...), file: UploadFile = File(...)):
+async def upload_ui(table_name: str = Form(...), file: UploadFile = File(...)):
     """Handles file upload from the Web UI and redirects to home."""
     try:
-        # Automatically prefix based on source selection
-        target_name = table_name
-        if source_type == "mysql" and not table_name.startswith("mysql_"):
-            target_name = f"mysql_{table_name}"
-        elif source_type == "postgres" and not table_name.startswith("cdc_"):
-            # We use cdc_ for postgres to align with existing pattern
-            target_name = f"cdc_{table_name}"
-            
-        await upload_and_ingest(target_name, file)
+        await upload_and_ingest(table_name, file)
         return RedirectResponse(url="/?msg=Ingestion+Started", status_code=303)
     except Exception as e:
         return f"<h1>Upload Failed</h1><p>{str(e)}</p><a href='/'>Go Back</a>"
