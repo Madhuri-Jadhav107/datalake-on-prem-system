@@ -9,7 +9,7 @@ table_name = sys.argv[1]
 
 # --- Configuration ---
 CATALOG_NAME = "iceberg_hive"
-WAREHOUSE_PATH = "s3a://madhuri-bucket/iceberg"
+WAREHOUSE_PATH = "s3a://bucket1/iceberg"
 
 # Initialize Spark Session with Iceberg and ES configs
 spark = SparkSession.builder \

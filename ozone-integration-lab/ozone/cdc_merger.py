@@ -40,13 +40,15 @@ schema = StructType([
             StructField("id", IntegerType()),
             StructField("name", StringType()),
             StructField("email", StringType()),
-            StructField("city", StringType())
+            StructField("city", StringType()),
+            StructField("updated_at", StringType())  # Added updated_at
         ])),
         StructField("after", StructType([
             StructField("id", IntegerType()),
             StructField("name", StringType()),
             StructField("email", StringType()),
-            StructField("city", StringType())
+            StructField("city", StringType()),
+            StructField("updated_at", StringType())  # Added updated_at
         ])),
         StructField("op", StringType())
     ]))
@@ -85,7 +87,8 @@ def process_batch(batch_df, batch_id):
                 id INT,
                 name STRING,
                 email STRING,
-                city STRING
+                city STRING,
+                updated_at STRING
             ) USING iceberg
         """)
         
@@ -98,8 +101,8 @@ def process_batch(batch_df, batch_id):
             USING updates s
             ON t.id = s.id
             WHEN MATCHED AND s.op = 'd' THEN DELETE
-            WHEN MATCHED THEN UPDATE SET t.name = s.name, t.email = s.email, t.city = s.city
-            WHEN NOT MATCHED AND s.op != 'd' THEN INSERT (id, name, email, city) VALUES (s.id, s.name, s.email, s.city)
+            WHEN MATCHED THEN UPDATE SET t.name = s.name, t.email = s.email, t.city = s.city, t.updated_at = s.updated_at
+            WHEN NOT MATCHED AND s.op != 'd' THEN INSERT (id, name, email, city, updated_at) VALUES (s.id, s.name, s.email, s.city, s.updated_at)
         """)
 
 if __name__ == "__main__":
@@ -111,7 +114,8 @@ if __name__ == "__main__":
             id INT,
             name STRING,
             email STRING,
-            city STRING
+            city STRING,
+            updated_at STRING
         ) USING iceberg
     """)
 
@@ -137,12 +141,13 @@ if __name__ == "__main__":
             col("data.payload.after.name").alias("name"),
             col("data.payload.after.email").alias("email"),
             col("data.payload.after.city").alias("city"),
+            col("data.payload.after.updated_at").alias("updated_at"),
             col("data.payload.op").alias("op")
         ).selectExpr(
             "timestamp",
             "topic",
             "coalesce(after_id, before_id) as id",
-            "name", "email", "city", "op"
+            "name", "email", "city", "updated_at", "op"
         )
 
     # Write to Iceberg via foreachBatch
