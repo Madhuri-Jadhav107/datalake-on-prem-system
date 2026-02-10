@@ -89,17 +89,8 @@ async def home_portal():
         cur.execute("SHOW TABLES")
         tables = [row[0] for row in cur.fetchall()]
         
-        # Categorize tables
-        pg_tables = [t for t in tables if "cdc_customers" == t or ("cdc" in t and "mysql" not in t)]
-        mysql_tables = [t for t in tables if "mysql" in t]
-        other_tables = [t for t in tables if t not in pg_tables and t not in mysql_tables]
-        
-        def build_links(table_list, brand_class):
-            return "".join([f'<li><a href="/view/{table}" class="btn-table {brand_class}">{table}</a></li>' for table in table_list])
-        
-        pg_links = build_links(pg_tables, "pg-source")
-        mysql_links = build_links(mysql_tables, "mysql-source")
-        other_links = build_links(other_tables, "other-source")
+        # Render all tables in a single list
+        table_links = "".join([f'<li><a href="/view/{table}" class="btn-table">{table}</a></li>' for table in tables])
         
         return f"""
         <html>
@@ -111,16 +102,12 @@ async def home_portal():
                     .hero {{ background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; padding: 60px 20px; text-align: center; border-bottom: 4px solid #3b82f6; }}
                     .hero h1 {{ font-family: 'Outfit', sans-serif; font-size: 3rem; margin-bottom: 5px; }}
                     .container {{ max-width: 1100px; margin: -40px auto 60px; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }}
-                    .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px; }}
+                    .grid {{ display: grid; grid-template-columns: 1fr; gap: 30px; margin-top: 20px; }}
                     .card {{ background: #f1f5f9; padding: 25px; border-radius: 16px; border-top: 5px solid #cbd5e1; }}
-                    .pg-card {{ border-color: #336791; }}
-                    .mysql-card {{ border-color: #f29111; }}
-                    ul {{ list-style: none; padding: 0; display: grid; grid-template-columns: 1fr; gap: 10px; }}
-                    .btn-table {{ display: block; padding: 15px; background: white; border-radius: 8px; text-decoration: none; font-weight: 600; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-                    .btn-table:hover {{ transform: scale(1.02); }}
-                    .pg-source {{ color: #336791; }}
-                    .mysql-source {{ color: #f29111; }}
-                    .badge {{ font-size: 0.7em; padding: 3px 8px; border-radius: 10px; color: white; background: #64748b; font-weight: bold; margin-left: 5px; }}
+                    .iceberg-card {{ border-color: #3b82f6; }}
+                    ul {{ list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }}
+                    .btn-table {{ display: block; padding: 15px; background: white; border-radius: 8px; text-decoration: none; font-weight: 600; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #0f172a; text-align: center; }}
+                    .btn-table:hover {{ transform: scale(1.02); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); color: #3b82f6; }}
                     .btn-sql {{ display: inline-block; padding: 12px 24px; background: #3b82f6; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; }}
                 </style>
             </head>
@@ -136,13 +123,9 @@ async def home_portal():
                     </div>
 
                     <div class="grid">
-                        <div class="card pg-card">
-                            <h3>🐘 PostgreSQL Sources</h3>
-                            <ul>{pg_links}</ul>
-                        </div>
-                        <div class="card mysql-card">
-                            <h3>🐬 MySQL Sources</h3>
-                            <ul>{mysql_links}</ul>
+                        <div class="card iceberg-card">
+                            <h3>🧊 Data Lake Tables (Iceberg)</h3>
+                            <ul>{table_links}</ul>
                         </div>
                     </div>
 
