@@ -1,4 +1,3 @@
-version: "3.8"
 
 x-common-config: &common-config
   image: apache/ozone:1.4.0
@@ -119,8 +118,7 @@ services:
   trino-coordinator:
     image: trinodb/trino:466
     hostname: trino-coordinator
-    ports:
-      -"18082:8084"
+    ports: ["18082:8080"]
     volumes:
       - ./trino/etc:/etc/trino
     networks:
