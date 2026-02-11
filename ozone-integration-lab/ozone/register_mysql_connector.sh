@@ -18,7 +18,7 @@ curl -X POST -H "Content-Type: application/json" --data '{
     "database.port": "'"$source_port"'",
     "database.user": "'"$source_user"'",
     "database.password": "'"$source_pass"'",
-    "database.server.id": "223344",
+    "database.server.id": "223345",
     "database.server.name": "mysql_source",
     "database.include.list": "'"$source_db"'",
     "topic.prefix": "mysql_source",
