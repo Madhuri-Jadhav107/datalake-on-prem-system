@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse
 import trino
 import os
@@ -19,6 +19,7 @@ CATALOG = "iceberg"
 SCHEMA = "trino_db"
 
 INGEST_SCRIPT = Path(__file__).parent / "ozone-integration-lab" / "ozone" / "run_ingestion.sh"
+SQL_INGEST_SCRIPT = Path(__file__).parent / "ozone-integration-lab" / "ozone" / "csv_to_sql.py"
 UPLOAD_DIR = Path(__file__).parent / "ozone-integration-lab" / "ozone"
 
 def get_trino_conn():
@@ -182,7 +183,17 @@ async def home_portal():
                                     <input type="file" name="file" accept=".csv" style="padding: 7px; width: 100%; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: white;" required>
                                 </div>
                             </div>
-                            <button type="submit" style="width: 100%; margin-top: 20px; padding: 15px; background: #3b82f6; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">Start Ingestion</button>
+
+                            <div style="margin-top: 15px;">
+                                <label style="display:block; margin-bottom: 8px; font-weight: 600;">Ingestion Mode:</label>
+                                <select name="mode" style="padding: 10px; width: 100%; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: white; cursor: pointer;">
+                                    <option value="direct">Direct (Spark Batch Ingestion)</option>
+                                    <option value="mysql">SQL-based (MySQL CDC Flow)</option>
+                                    <option value="postgres">SQL-based (PostgreSQL CDC Flow)</option>
+                                </select>
+                            </div>
+
+                            <button type="submit" style="width: 100%; margin-top: 20px; padding: 15px; background: #3b82f6; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.3s;">🚀 Start Ingestion</button>
                         </form>
                     </div>
                 </div>
@@ -250,10 +261,10 @@ async def sql_workspace(query: Optional[str] = None):
     """
 
 @app.post("/upload-ui")
-async def upload_ui(table_name: str = Form(...), file: UploadFile = File(...)):
+async def upload_ui(background_tasks: BackgroundTasks, table_name: str = Form(...), mode: str = "direct", file: UploadFile = File(...)):
     """Handles file upload from the Web UI and redirects to home."""
     try:
-        await upload_and_ingest(table_name, file)
+        await upload_and_ingest(table_name, file, background_tasks, mode)
         return RedirectResponse(url="/?msg=Ingestion+Started", status_code=303)
     except Exception as e:
         return f"<h1>Upload Failed</h1><p>{str(e)}</p><a href='/'>Go Back</a>"
@@ -285,16 +296,33 @@ async def get_table_data(table_name: str, limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/upload/{table_name}")
-async def upload_and_ingest(table_name: str, file: UploadFile = File(...)):
-    """API Endpoint: Automated Ingestion."""
+async def upload_and_ingest(table_name: str, file: UploadFile = File(...), background_tasks: BackgroundTasks = None, mode: str = "direct"):
+    """API Endpoint: Automated Ingestion with mode selection."""
     try:
-        if not table_name.isidentifier(): raise HTTPException(status_code=400, detail="Invalid name")
+        if not table_name.isidentifier(): 
+            raise HTTPException(status_code=400, detail="Invalid Table Name")
+        
         file_path = UPLOAD_DIR / file.filename
-        with file_path.open("wb") as buffer: shutil.copyfileobj(file.file, buffer)
-        script_arg_path = f"ozone-integration-lab/ozone/{file.filename}"
-        cmd = ["bash", str(INGEST_SCRIPT), script_arg_path, table_name]
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return {"message": "Ingestion triggered", "table": table_name}
+        with file_path.open("wb") as buffer: 
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Prepare arguments
+        relative_file_path = f"ozone-integration-lab/ozone/{file.filename}"
+
+        if mode == "direct":
+            # Original Batch flow via Spark
+            cmd = ["bash", str(INGEST_SCRIPT), relative_file_path, table_name]
+        else:
+            # New SQL-based flow via Debezium CDC
+            # mode will be 'mysql' or 'postgres'
+            cmd = ["python3", str(SQL_INGEST_SCRIPT), str(file_path), mode, table_name]
+
+        if background_tasks:
+            background_tasks.add_task(subprocess.run, cmd, capture_output=True)
+        else:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        return {"message": f"Ingestion ({mode}) triggered", "table": table_name}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
