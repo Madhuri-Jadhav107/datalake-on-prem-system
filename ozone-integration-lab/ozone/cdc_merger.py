@@ -108,6 +108,9 @@ def process_batch(batch_df, batch_id):
 if __name__ == "__main__":
     spark = create_spark_session()
     
+    # Ensure the namespace (database) exists in the catalog
+    spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {CATALOG_NAME}.{DB_NAME}")
+
     # Create initial table if not exists (Postgres source)
     spark.sql(f"""
         CREATE TABLE IF NOT EXISTS {CATALOG_NAME}.{DB_NAME}.cdc_customers (
