@@ -20,9 +20,9 @@ def csv_to_sql(csv_path, db_type="mysql", table_name="customers"):
 
     # Database connection parameters (standard for this setup)
     if db_type == "mysql":
-        db_url = "mysql+pymysql://user:password@localhost:15431/inventory"
+        db_url = "mysql+pymysql://user:password@localhost:13306/inventory"
     elif db_type == "postgres":
-        db_url = "postgresql://user:password@localhost:15432/inventory"
+        db_url = "postgresql://user:password@localhost:15431/inventory"
     else:
         print("❌ Error: Unsupported db_type. Use 'mysql' or 'postgres'.")
         return
