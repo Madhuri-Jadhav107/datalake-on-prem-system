@@ -1,0 +1,91 @@
+{
+    "info": {
+        "_postman_id": "datalake-demo-uuid",
+        "name": "Data Lakehouse API",
+        "description": "Collection to demo the Local Data Lakehouse API (Ingest & Query)",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "1. Health Check",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://{{server_ip}}:8000/",
+                    "protocol": "http",
+                    "host": [
+                        "{{server_ip}}"
+                    ],
+                    "port": "8000",
+                    "path": [
+                        ""
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "2. Ingest Products (CSV)",
+            "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [
+                        {
+                            "key": "file",
+                            "type": "file",
+                            "description": "Select the products.csv file here"
+                        }
+                    ]
+                },
+                "url": {
+                    "raw": "http://{{server_ip}}:8000/ingest/products",
+                    "protocol": "http",
+                    "host": [
+                        "{{server_ip}}"
+                    ],
+                    "port": "8000",
+                    "path": [
+                        "ingest",
+                        "products"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "3. Query Products",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://{{server_ip}}:8000/query?sql=SELECT * FROM products WHERE price > 50 ORDER BY price DESC",
+                    "protocol": "http",
+                    "host": [
+                        "{{server_ip}}"
+                    ],
+                    "port": "8000",
+                    "path": [
+                        "query"
+                    ],
+                    "query": [
+                        {
+                            "key": "sql",
+                            "value": "SELECT * FROM products WHERE price > 50 ORDER BY price DESC"
+                        }
+                    ]
+                }
+            },
+            "response": []
+        }
+    ],
+    "variable": [
+        {
+            "key": "server_ip",
+            "value": "172.203.228.211",
+            "type": "string"
+        }
+    ]
+}
