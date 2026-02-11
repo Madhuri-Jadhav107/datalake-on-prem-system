@@ -10,8 +10,12 @@ def csv_to_sql(csv_path, db_type="mysql", table_name="customers"):
     """
     print(f"🚀 Starting SQL-based ingestion for {csv_path}...")
     
+    abs_csv_path = os.path.abspath(csv_path)
+    print(f"📂 Checking absolute path: {abs_csv_path}")
+    print(f"🏠 Current Working Directory: {os.getcwd()}")
+    
     if not os.path.exists(csv_path):
-        print(f"❌ Error: File {csv_path} not found.")
+        print(f"❌ Error: File {csv_path} not found at {abs_csv_path}")
         return
 
     # Database connection parameters (standard for this setup)
