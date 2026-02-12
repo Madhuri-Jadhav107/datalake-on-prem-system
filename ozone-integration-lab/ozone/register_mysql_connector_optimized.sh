@@ -22,7 +22,7 @@ curl -X POST -H "Content-Type: application/json" --data '{
     "database.server.name": "mysql_source",
     "database.include.list": "'"$source_db"'",
     "topic.prefix": "mysql_source_optimized",
-    "table.include.list": "inventory..*",
+    "table.include.list": "inventory\\..*",
     "snapshot.mode": "initial",
     "snapshot.locking.mode": "none",
     "snapshot.max.threads": "4",
