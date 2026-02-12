@@ -346,7 +346,7 @@ async def upload_and_ingest(table_name: str, file: UploadFile = File(...), backg
                 subprocess.Popen(load_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.Popen(spark_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        return {"message": f"Ingestion ({mode}) & Spark Streaming triggered", "table": f"cdc_{table_name}_optimized"}
+        return {"message": f"Ingestion ({mode}) & Spark Streaming triggered", "table": f"cdc_{table_name}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

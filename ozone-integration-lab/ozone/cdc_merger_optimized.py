@@ -10,9 +10,9 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 TARGET_TABLE_ARG = sys.argv[1]
-CATALOG_NAME = "iceberg_hive"
+CATALOG_NAME = "iceberg"
 DB_NAME = "trino_db"
-TARGET_TABLE = f"cdc_{TARGET_TABLE_ARG}_optimized"
+TARGET_TABLE = f"cdc_{TARGET_TABLE_ARG}"
 ICEBERG_TABLE = f"{CATALOG_NAME}.{DB_NAME}.{TARGET_TABLE}"
 KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
 KAFKA_TOPIC_PATTERN = f".*\\.public\\.{TARGET_TABLE_ARG}|.*\\.inventory\\.{TARGET_TABLE_ARG}"

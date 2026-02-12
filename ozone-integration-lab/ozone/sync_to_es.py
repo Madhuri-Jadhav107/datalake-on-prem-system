@@ -8,7 +8,7 @@ if len(sys.argv) < 2:
 table_name = sys.argv[1]
 
 # --- Configuration ---
-CATALOG_NAME = "iceberg_hive"
+CATALOG_NAME = "iceberg"
 WAREHOUSE_PATH = "s3a://bucket1/iceberg"
 
 # Initialize Spark Session with Iceberg and ES configs
