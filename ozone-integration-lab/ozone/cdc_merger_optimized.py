@@ -106,10 +106,14 @@ def create_spark_session():
         .config("spark.streaming.kafka.maxRatePerPartition", "5000") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.write.distribution-mode", "hash") \
         .config(f"spark.sql.catalog.{CATALOG_NAME}.write.metadata.delete-after-commit.enabled", "true") \
+        .config("spark.hadoop.fs.s3a.multiobjectdelete.enable", "false") \
+        .config("spark.hadoop.fs.s3a.directory.marker.retention", "keep") \
+        .config("spark.hadoop.fs.s3a.fast.upload", "true") \
         .getOrCreate()
 
 def process_batch(batch_df, batch_id):
     if batch_df.isEmpty():
+        print(f"⏳ Batch {batch_id}: No new data found in Kafka. Still watching...")
         return
 
     print(f"🚀 Processing Optimized Batch {batch_id} | Rows: {batch_df.count()}")
@@ -214,4 +218,5 @@ if __name__ == "__main__":
         .start()
 
     print(f"🔥 Optimized Merger Running for 1.6B Records. Target: {TARGET_TABLE}")
+    print(f"📡 Subscribed to Topics matching: {KAFKA_TOPIC_PATTERN}")
     query.awaitTermination()
