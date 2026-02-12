@@ -439,15 +439,23 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                         parent_map = {}
                 else:
                     parent_map = {}
-            except Exception as e:
-                print(f"Parent Discovery Failed: {e}")
-                parent_map = {}
 
         # Execute main data query
-        if params:
-            safe_execute(cur, query, params)
-        else:
-            safe_execute(cur, query)
+        try:
+            if params:
+                safe_execute(cur, query, params)
+            else:
+                safe_execute(cur, query)
+        except Exception as qe:
+            if "snapshot id does not exists" in str(qe).lower() and snapshot:
+                print(f"⚠️ [FALLBACK] Snapshot {snapshot} expired. Fetching latest state...")
+                latest_query = query.replace(f" FOR VERSION AS OF {snapshot}", "")
+                if params:
+                    safe_execute(cur, latest_query, params)
+                else:
+                    safe_execute(cur, latest_query)
+            else:
+                raise qe
             
         columns = [desc[0] for desc in cur.description]
         rows = cur.fetchall()

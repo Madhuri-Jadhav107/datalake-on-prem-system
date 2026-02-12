@@ -168,7 +168,7 @@ if __name__ == "__main__":
         TBLPROPERTIES (
             'write.format.default'='parquet',
             'write.parquet.compression-codec'='snappy',
-            'write.metadata.previous-versions-max'='10',
+            'write.metadata.previous-versions-max'='100',
             'write.distribution-mode'='hash'
         )
     """)
