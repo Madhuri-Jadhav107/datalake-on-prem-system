@@ -324,7 +324,7 @@ async def upload_and_ingest(table_name: str, file: UploadFile = File(...), backg
             # 2. Start Optimized Spark Merger (Streaming)
             # We use 'docker compose exec -d' to run it in the background inside the container
             spark_cmd = [
-                "docker", "compose", "-p", "madhuri-ozone", "exec", "-d", "spark-iceberg", 
+                "docker", "compose", "exec", "-d", "spark-iceberg", 
                 "spark-submit", 
                 "--master", "local[*]",
                 "--packages", "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0",
@@ -340,7 +340,11 @@ async def upload_and_ingest(table_name: str, file: UploadFile = File(...), backg
                     
                     print(f"🚀 [CDC FLOW] Step 2: Starting Spark Streaming Merger for {table_name}...")
                     print(f"DEBUG: Running Spark command: {' '.join(spark_cmd)}")
-                    subprocess.run(spark_cmd, capture_output=True)
+                    res_spark = subprocess.run(spark_cmd, capture_output=True, text=True)
+                    if res_spark.returncode != 0:
+                        print(f"❌ [CDC ERROR] Spark trigger failed: {res_spark.stderr}")
+                    else:
+                        print(f"✅ [CDC SUCCESS] Spark trigger command sent successfully.")
                 background_tasks.add_task(run_cdc_pipeline)
             else:
                 print(f"🚀 [CDC FLOW] Triggering Source Load & Spark Merger for {table_name}...")
