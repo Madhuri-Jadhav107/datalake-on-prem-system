@@ -439,6 +439,9 @@ async def dashboard_view(table_name: str, search: Optional[str] = None, snapshot
                         parent_map = {}
                 else:
                     parent_map = {}
+            except Exception as e:
+                print(f"Parent Discovery Failed: {e}")
+                parent_map = {}
 
         # Execute main data query
         try:
