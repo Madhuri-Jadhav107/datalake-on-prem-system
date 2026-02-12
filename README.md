@@ -75,7 +75,20 @@ bash smart_ingest.sh
       /home/iceberg/local/ozone-integration-lab/ozone/cdc_merger.py
     ```
 
-### C. Elasticsearch Search Sync
+### C. Smart SQL Ingestion (CLI)
+You can manually trigger ingestion into your SQL databases via Termius. This works even when the Dashboard is active.
+
+**Ingest to MySQL:**
+```bash
+python3 ./ozone-integration-lab/ozone/csv_to_sql.py ./ozone-integration-lab/ozone/customers.csv mysql customers
+```
+
+**Ingest to PostgreSQL:**
+```bash
+python3 ./ozone-integration-lab/ozone/csv_to_sql.py ./ozone-integration-lab/ozone/large_sample.csv postgres transactions
+```
+
+### D. Elasticsearch Search Sync
 Synchronize your Iceberg data to Elasticsearch for high-speed searching:
 ```bash
 docker exec madhuri-ozone-spark-iceberg-1 spark-submit \
