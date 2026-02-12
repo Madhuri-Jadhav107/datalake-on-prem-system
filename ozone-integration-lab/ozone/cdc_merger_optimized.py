@@ -9,13 +9,14 @@ if len(sys.argv) < 2:
     print("Usage: spark-submit cdc_merger_optimized.py <table_name>")
     sys.exit(1)
 
-TARGET_TABLE_ARG = sys.argv[1] # Renamed to avoid conflict with TARGET_TABLE in ICEBERG_TABLE
+TARGET_TABLE_ARG = sys.argv[1]
 CATALOG_NAME = "iceberg_hive"
 DB_NAME = "trino_db"
-ICEBERG_TABLE = f"{CATALOG_NAME}.{DB_NAME}.cdc_{TARGET_TABLE_ARG}_optimized"
+TARGET_TABLE = f"cdc_{TARGET_TABLE_ARG}_optimized"
+ICEBERG_TABLE = f"{CATALOG_NAME}.{DB_NAME}.{TARGET_TABLE}"
 KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
-KAFKA_TOPIC_PATTERN = f".*\\.public\\.{TARGET_TABLE_ARG}|.*\\.inventory\\.{TARGET_TABLE_ARG}" # Dynamically set pattern
-CHECKPOINT_PATH = f"s3a://bucket1/checkpoints/cdc_{TARGET_TABLE_ARG}_optimized"
+KAFKA_TOPIC_PATTERN = f".*\\.public\\.{TARGET_TABLE_ARG}|.*\\.inventory\\.{TARGET_TABLE_ARG}"
+CHECKPOINT_PATH = f"s3a://bucket1/checkpoints/{TARGET_TABLE}"
 
 # Optimized Partitioning & Shuffle
 SHUFFLE_PARTITIONS = 64  # Match with Kafka partitions
@@ -102,7 +103,7 @@ def process_batch(batch_df, batch_id):
     
     # Atomic Merge with Iceberg
     batch_df.sparkSession.sql(f"""
-        MERGE INTO {CATALOG_NAME}.{DB_NAME}.{TARGET_TABLE} t
+        MERGE INTO {ICEBERG_TABLE} t
         USING updates s
         ON t.id = s.id
         WHEN MATCHED AND s.op = 'd' THEN DELETE
@@ -118,7 +119,7 @@ if __name__ == "__main__":
     # Initialize Table with Optimized Properties
     spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {CATALOG_NAME}.{DB_NAME}")
     spark.sql(f"""
-        CREATE TABLE IF NOT EXISTS {CATALOG_NAME}.{DB_NAME}.{TARGET_TABLE} (
+        CREATE TABLE IF NOT EXISTS {ICEBERG_TABLE} (
             id INT, name STRING, email STRING, city STRING, updated_at STRING
         ) USING iceberg
         TBLPROPERTIES (
@@ -140,7 +141,7 @@ if __name__ == "__main__":
 
     query = raw_df.writeStream \
         .foreachBatch(process_batch) \
-        .option("checkpointLocation", "/tmp/checkpoints/cdc_merger_optimized") \
+        .option("checkpointLocation", CHECKPOINT_PATH) \
         .trigger(processingTime="10 seconds") \
         .start()
 
