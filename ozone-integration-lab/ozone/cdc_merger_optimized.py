@@ -1,14 +1,21 @@
+import sys
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col, row_number, desc
 from pyspark.sql.window import Window
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
-# --- High-Throughput Configuration ---
+# --- Configuration ---
+if len(sys.argv) < 2:
+    print("Usage: spark-submit cdc_merger_optimized.py <table_name>")
+    sys.exit(1)
+
+TARGET_TABLE_ARG = sys.argv[1] # Renamed to avoid conflict with TARGET_TABLE in ICEBERG_TABLE
 CATALOG_NAME = "iceberg_hive"
 DB_NAME = "trino_db"
-TARGET_TABLE = "cdc_customers_optimized"
+ICEBERG_TABLE = f"{CATALOG_NAME}.{DB_NAME}.cdc_{TARGET_TABLE_ARG}_optimized"
 KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
-KAFKA_TOPIC_PATTERN = ".*\\.public\\.customers|.*\\.inventory\\.customers"
+KAFKA_TOPIC_PATTERN = f".*\\.public\\.{TARGET_TABLE_ARG}|.*\\.inventory\\.{TARGET_TABLE_ARG}" # Dynamically set pattern
+CHECKPOINT_PATH = f"s3a://bucket1/checkpoints/cdc_{TARGET_TABLE_ARG}_optimized"
 
 # Optimized Partitioning & Shuffle
 SHUFFLE_PARTITIONS = 64  # Match with Kafka partitions
