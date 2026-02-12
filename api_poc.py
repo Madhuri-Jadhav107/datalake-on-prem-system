@@ -339,10 +339,13 @@ async def upload_and_ingest(table_name: str, file: UploadFile = File(...), backg
                     print(res_load.stdout)
                     
                     print(f"🚀 [CDC FLOW] Step 2: Starting Spark Streaming Merger for {table_name}...")
+                    print(f"DEBUG: Running Spark command: {' '.join(spark_cmd)}")
                     subprocess.run(spark_cmd, capture_output=True)
                 background_tasks.add_task(run_cdc_pipeline)
             else:
                 print(f"🚀 [CDC FLOW] Triggering Source Load & Spark Merger for {table_name}...")
+                print(f"DEBUG: Running Load command: {' '.join(load_cmd)}")
+                print(f"DEBUG: Running Spark command: {' '.join(spark_cmd)}")
                 subprocess.Popen(load_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.Popen(spark_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 

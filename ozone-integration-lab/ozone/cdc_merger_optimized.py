@@ -134,9 +134,12 @@ def process_batch(batch_df, batch_id):
         .filter(col("rn") == 1).drop("rn", "timestamp")
     
     # Clean up 'before_' columns from the final set
-    final_cols = ["id", "op"] + DATA_COLUMNS
+    # --- BUG FIX: Avoid 'id' duplication if it exists in DATA_COLUMNS ---
+    actual_data_cols = [c for c in DATA_COLUMNS if c.lower() != "id"]
+    final_cols = ["id", "op"] + actual_data_cols
     deduped_df = deduped_df.select(*final_cols)
 
+    print(f"✅ Final Schema: {deduped_df.columns}")
     deduped_df.createOrReplaceTempView("updates")
     
     # Atomic Merge with Iceberg
