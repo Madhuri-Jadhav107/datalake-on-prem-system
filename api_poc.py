@@ -261,7 +261,7 @@ async def sql_workspace(query: Optional[str] = None):
     """
 
 @app.post("/upload-ui")
-async def upload_ui(background_tasks: BackgroundTasks, table_name: str = Form(...), mode: str = "direct", file: UploadFile = File(...)):
+async def upload_ui(background_tasks: BackgroundTasks, table_name: str = Form(...), mode: str = Form("direct"), file: UploadFile = File(...)):
     """Handles file upload from the Web UI and redirects to home."""
     try:
         await upload_and_ingest(table_name, file, background_tasks, mode)
@@ -296,7 +296,7 @@ async def get_table_data(table_name: str, limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/upload/{table_name}")
-async def upload_and_ingest(table_name: str, file: UploadFile = File(...), background_tasks: BackgroundTasks = None, mode: str = "direct"):
+async def upload_and_ingest(table_name: str, file: UploadFile = File(...), background_tasks: BackgroundTasks = None, mode: str = Form("direct")):
     """API Endpoint: Automated Ingestion with mode selection."""
     try:
         if not table_name.isidentifier(): 
@@ -334,10 +334,15 @@ async def upload_and_ingest(table_name: str, file: UploadFile = File(...), backg
             if background_tasks:
                 # Run load first, then spark merger
                 def run_cdc_pipeline():
-                    subprocess.run(load_cmd, capture_output=True)
+                    print(f"🚀 [CDC FLOW] Step 1: Loading data into {mode} source...")
+                    res_load = subprocess.run(load_cmd, capture_output=True, text=True)
+                    print(res_load.stdout)
+                    
+                    print(f"🚀 [CDC FLOW] Step 2: Starting Spark Streaming Merger for {table_name}...")
                     subprocess.run(spark_cmd, capture_output=True)
                 background_tasks.add_task(run_cdc_pipeline)
             else:
+                print(f"🚀 [CDC FLOW] Triggering Source Load & Spark Merger for {table_name}...")
                 subprocess.Popen(load_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.Popen(spark_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
