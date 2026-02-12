@@ -112,19 +112,40 @@ def process_batch(batch_df, batch_id):
 
     print(f"🚀 Processing Optimized Batch {batch_id} | Rows: {batch_df.count()}")
     
-    # Parse and Deduplicate
-    after_cols = [col(f"data.payload.after.{c}").alias(c) for c in DATA_COLUMNS]
-    before_cols = [col(f"data.payload.before.{c}").alias(f"before_{c}") for c in DATA_COLUMNS]
-    
-    parsed_df = batch_df.select(
+    # Resilient Parsing: Handle both 'flat' and 'wrapped' Debezium JSON
+    # We try to detect if 'payload' exists, if not we assume flat
+    parsed_json_df = batch_df.select(
         col("timestamp"),
-        from_json(col("value").cast("string"), DYNAMIC_SCHEMA).alias("data")
-    ).select(
-        col("timestamp"),
-        col("data.payload.op").alias("op"),
-        *after_cols,
-        *before_cols
-    ).selectExpr(
+        from_json(col("value").cast("string"), DYNAMIC_SCHEMA).alias("raw_data")
+    )
+
+    # Check for payload wrapper
+    first_row = parsed_json_df.select("raw_data").limit(1).collect()
+    has_payload = False
+    if first_row and first_row[0]["raw_data"] and "payload" in first_row[0]["raw_data"]:
+        has_payload = True
+        print("🔍 Detected WRAPPED (payload) JSON format.")
+    else:
+        print("🔍 Detected FLAT JSON format.")
+
+    if has_payload:
+        data_df = parsed_json_df.select(
+            col("timestamp"),
+            col("raw_data.payload.op").alias("op"),
+            *[col(f"raw_data.payload.after.{c}").alias(c) for c in DATA_COLUMNS],
+            *[col(f"raw_data.payload.before.{c}").alias(f"before_{c}") for c in DATA_COLUMNS]
+        )
+    else:
+        # For flat format, we need to adjust the schema discovery or just use the data fields
+        # DYNAMIC_SCHEMA already matches the flat format if we remove the payload wrapper
+        data_df = parsed_json_df.select(
+            col("timestamp"),
+            col("raw_data.op").alias("op"),
+            *[col(f"raw_data.after.{c}").alias(c) for c in DATA_COLUMNS],
+            *[col(f"raw_data.before.{c}").alias(f"before_{c}") for c in DATA_COLUMNS]
+        )
+
+    parsed_df = data_df.selectExpr(
         f"coalesce({DATA_COLUMNS[0]}, before_{DATA_COLUMNS[0]}) as id",
         "*"
     )
@@ -134,7 +155,6 @@ def process_batch(batch_df, batch_id):
         .filter(col("rn") == 1).drop("rn", "timestamp")
     
     # Clean up 'before_' columns from the final set
-    # --- BUG FIX: Avoid 'id' duplication if it exists in DATA_COLUMNS ---
     actual_data_cols = [c for c in DATA_COLUMNS if c.lower() != "id"]
     final_cols = ["id", "op"] + actual_data_cols
     deduped_df = deduped_df.select(*final_cols)
