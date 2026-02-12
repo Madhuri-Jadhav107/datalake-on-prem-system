@@ -22,6 +22,7 @@ INGEST_SCRIPT = Path(__file__).parent / "ozone-integration-lab" / "ozone" / "run
 SQL_INGEST_SCRIPT = Path(__file__).parent / "ozone-integration-lab" / "ozone" / "csv_to_sql.py"
 UPLOAD_DIR = Path(__file__).parent / "ozone-integration-lab" / "ozone"
 COMPOSE_FILE = Path(__file__).parent / "ozone-integration-lab" / "ozone" / "docker-compose.yaml"
+DOCKER_PROJECT = os.getenv("DOCKER_PROJECT", "madhuri-ozone")
 
 def get_trino_conn():
     return trino.dbapi.connect(
@@ -323,9 +324,9 @@ async def upload_and_ingest(table_name: str, file: UploadFile = File(...), backg
             load_cmd = ["python3", str(SQL_INGEST_SCRIPT), str(file_path), mode, table_name]
             
             # 2. Start Optimized Spark Merger (Streaming)
-            # We use 'docker compose -f <path> exec -d' to run it in the background inside the container
+            # We use 'docker compose -p <project> -f <path> exec -d' to run it in the background inside the container
             spark_cmd = [
-                "docker", "compose", "-f", str(COMPOSE_FILE), "exec", "-d", "spark-iceberg", 
+                "docker", "compose", "-p", DOCKER_PROJECT, "-f", str(COMPOSE_FILE), "exec", "-d", "spark-iceberg", 
                 "spark-submit", 
                 "--master", "local[*]",
                 "--packages", "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0",
