@@ -73,7 +73,9 @@ def load_dynamic_schema(table_name):
     ])
 
 DYNAMIC_SCHEMA = load_dynamic_schema(TARGET_TABLE_ARG)
-DATA_COLUMNS = [f.name for f in DYNAMIC_SCHEMA["payload"]["after"].dataType.fields]
+
+# Correctly access nested StructType fields: StructType -> StructField -> DataType (StructType) -> StructField -> DataType (StructType)
+DATA_COLUMNS = [f.name for f in DYNAMIC_SCHEMA["payload"].dataType["after"].dataType.fields]
 
 def create_spark_session():
     return SparkSession.builder \
