@@ -36,7 +36,15 @@ def csv_to_sql(csv_path, db_type="mysql", table_name="customers"):
         engine = sqlalchemy.create_engine(db_url)
         df.to_sql(table_name, con=engine, if_exists="append", index=False)
         
+        # --- NEW: Export Schema for Spark ---
+        schema_file = os.path.join(os.path.dirname(abs_csv_path), f"{table_name}_schema.json")
+        schema_info = {col: str(dtype) for col, dtype in df.dtypes.items()}
+        import json
+        with open(schema_file, 'w') as f:
+            json.dump(schema_info, f)
+        
         print(f"✅ Successfully inserted data into {db_type} table '{table_name}'.")
+        print(f"📄 Schema exported to {schema_file}")
         print(f"✨ CDC (Debezium) will now pick up these changes and move them to Kafka/Ozone.")
 
     except Exception as e:

@@ -312,17 +312,36 @@ async def upload_and_ingest(table_name: str, file: UploadFile = File(...), backg
         if mode == "direct":
             # Original Batch flow via Spark
             cmd = ["bash", str(INGEST_SCRIPT), relative_file_path, table_name]
+            if background_tasks:
+                background_tasks.add_task(subprocess.run, cmd, capture_output=True)
+            else:
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
             # New SQL-based flow via Debezium CDC
-            # mode will be 'mysql' or 'postgres'
-            cmd = ["python3", str(SQL_INGEST_SCRIPT), str(file_path), mode, table_name]
+            # 1. Load Source DB
+            load_cmd = ["python3", str(SQL_INGEST_SCRIPT), str(file_path), mode, table_name]
+            
+            # 2. Start Optimized Spark Merger (Streaming)
+            # We use 'docker compose exec -d' to run it in the background inside the container
+            spark_cmd = [
+                "docker", "compose", "-p", "madhuri-ozone", "exec", "-d", "spark-iceberg", 
+                "spark-submit", 
+                "--master", "local[*]",
+                "--packages", "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.2,org.apache.hadoop:hadoop-aws:3.3.4,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0",
+                "/home/iceberg/local/cdc_merger_optimized.py", table_name
+            ]
 
-        if background_tasks:
-            background_tasks.add_task(subprocess.run, cmd, capture_output=True)
-        else:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if background_tasks:
+                # Run load first, then spark merger
+                def run_cdc_pipeline():
+                    subprocess.run(load_cmd, capture_output=True)
+                    subprocess.run(spark_cmd, capture_output=True)
+                background_tasks.add_task(run_cdc_pipeline)
+            else:
+                subprocess.Popen(load_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(spark_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        return {"message": f"Ingestion ({mode}) triggered", "table": table_name}
+        return {"message": f"Ingestion ({mode}) & Spark Streaming triggered", "table": f"cdc_{table_name}_optimized"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
