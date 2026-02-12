@@ -23,23 +23,16 @@ curl -X POST -H "Content-Type: application/json" --data '{
     "database.include.list": "'"$source_db"'",
     "topic.prefix": "mysql_source_optimized",
     "table.include.list": "inventory.customers",
-    
-    # --- Snapshot Optimization ---
     "snapshot.mode": "initial",
     "snapshot.locking.mode": "none",
     "snapshot.max.threads": "4",
-    
-    # --- Throughput Tuning ---
     "max.batch.size": "20480",
     "max.queue.size": "81920",
     "poll.interval.ms": "100",
-    
-    # --- Kafka Serialization ---
     "key.converter": "org.apache.kafka.connect.json.JsonConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
     "key.converter.schemas.enable": "false",
     "value.converter.schemas.enable": "false",
-    
     "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
     "schema.history.internal.kafka.topic": "schema-changes.inventory.optimized"
   }
