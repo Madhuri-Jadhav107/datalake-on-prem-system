@@ -184,7 +184,7 @@ if __name__ == "__main__":
     # Initialize Table with Optimized Properties
     spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {CATALOG_NAME}.{DB_NAME}")
     
-    table_schema_sql = ", ".join([f"{f.name} {f.dataType.simpleString()}" for f in DYNAMIC_SCHEMA["payload"]["after"].dataType.fields])
+    table_schema_sql = ", ".join([f"{f.name} {f.dataType.simpleString()}" for f in DYNAMIC_SCHEMA["payload"].dataType["after"].dataType.fields])
     
     spark.sql(f"""
         CREATE TABLE IF NOT EXISTS {ICEBERG_TABLE} (
